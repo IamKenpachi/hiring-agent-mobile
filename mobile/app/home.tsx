@@ -85,182 +85,184 @@ export default function HomeHubScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Brand + Profile Avatar Bar */}
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2.5">
-            <HubBrandBriefcaseIcon size={34} />
-            <Text
-              style={WEB_SANS}
-              className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
+        {/* Top Brand + Profile Avatar Bar & Active Status Pill */}
+        <View>
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2.5">
+              <HubBrandBriefcaseIcon size={34} />
+              <Text
+                style={WEB_SANS}
+                className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
+              >
+                Hiring Agent AI
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Account menu"
+              onPress={() => setAccountMenuOpen(true)}
+              className="h-[38px] w-[38px] items-center justify-center rounded-full border border-white/20 bg-white/[0.08] active:bg-white/15"
             >
-              Hiring Agent AI
-            </Text>
+              <UserIcon size={18} color="#CBD5E1" />
+            </Pressable>
           </View>
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Account menu"
-            onPress={() => setAccountMenuOpen(true)}
-            className="h-[38px] w-[38px] items-center justify-center rounded-full border border-white/20 bg-white/[0.08] active:bg-white/15"
+            accessibilityLabel="Active Profile Settings"
+            onPress={() => router.push("/(tabs)/settings")}
+            className="mt-4 flex-row items-center justify-center gap-2 self-center rounded-full border border-white/15 bg-white/[0.045] px-4 py-2 active:bg-white/[0.09]"
           >
-            <UserIcon size={18} color="#CBD5E1" />
+            <View
+              style={
+                Platform.OS === "web"
+                  ? ({
+                      boxShadow: "0 0 8px rgba(34, 197, 94, 0.85)",
+                    } as unknown as Record<string, string>)
+                  : undefined
+              }
+              className="h-2.5 w-2.5 rounded-full bg-[#22C55E]"
+            />
+            <Text
+              style={WEB_SANS}
+              numberOfLines={1}
+              className="max-w-[300px] text-[12px] font-medium text-[#CBD5E1]"
+            >
+              Active Profile: Senior Data Analyst • Gemini 3.7 Flash
+            </Text>
           </Pressable>
         </View>
 
-        {/* Active Profile & Engine Status Pill */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Active Profile Settings"
-          onPress={() => router.push("/(tabs)/settings")}
-          className="mt-4 flex-row items-center justify-center gap-2 self-center rounded-full border border-white/15 bg-white/[0.045] px-4 py-2 active:bg-white/[0.09]"
-        >
-          <View
-            style={
-              Platform.OS === "web"
-                ? ({
-                    boxShadow: "0 0 8px rgba(34, 197, 94, 0.85)",
-                  } as unknown as Record<string, string>)
-                : undefined
-            }
-            className="h-2.5 w-2.5 rounded-full bg-[#22C55E]"
-          />
-          <Text
-            style={WEB_SANS}
-            numberOfLines={1}
-            className="max-w-[300px] text-[12px] font-medium text-[#CBD5E1]"
-          >
-            Active Profile: Senior Data Analyst • Gemini 3.7 Flash
-          </Text>
-        </Pressable>
-
-        {/* Hero Greeting */}
-        <View className="mt-6 mb-5 items-center">
-          <Text
-            style={WEB_SANS}
-            className="text-center text-[27px] font-bold leading-[33px] tracking-[-0.6px] text-white"
-          >
-            {"What would you like\nto do today?"}
-          </Text>
-        </View>
-
-        {/* Main Module Cards */}
-        <View className="gap-4">
-          {/* Card 1: Job Hunter */}
-          <View
-            style={GLASS_CARD_STYLE}
-            className="rounded-[20px] border border-white/15 bg-[#121629]/85 p-4"
-          >
-            <View className="flex-row items-start gap-4">
-              <View
-                style={ICON_TILE_GLOW_STYLE}
-                className="h-[68px] w-[68px] items-center justify-center rounded-[16px] border border-white/15 bg-[#181F36]/95"
-              >
-                <JobHunterHubIcon size={48} />
-              </View>
-
-              <View className="flex-1 pt-0.5">
-                <Text
-                  style={WEB_SANS}
-                  className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
-                >
-                  Job Hunter
-                </Text>
-                <Text
-                  style={WEB_SANS}
-                  className="mt-1 text-[13px] leading-[18.5px] text-[#94A3B8]"
-                >
-                  Search 8 major job boards simultaneously with AI matching
-                </Text>
-              </View>
-            </View>
-
-            <View className="mt-4 flex-row items-center justify-between gap-2">
-              <View className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5">
-                <Text style={WEB_SANS} className="text-[11px] font-medium text-[#CBD5E1]">
-                  8 Boards • Live Ranking
-                </Text>
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Launch Hunter"
-                onPress={() => router.push("/(tabs)/hunt")}
-                style={CTA_GLOW_STYLE}
-                className="h-[38px] flex-row items-center justify-center overflow-hidden rounded-full px-4 active:opacity-90"
-              >
-                <AuthButtonGradient />
-                <View className="relative z-10 flex-row items-center gap-1.5">
-                  <Text style={WEB_SANS} className="text-[13px] font-semibold text-white">
-                    Launch Hunter
-                  </Text>
-                  <ArrowRight size={14} color="#FFFFFF" />
-                </View>
-              </Pressable>
-            </View>
+        {/* Vertically Centered Middle Section: Hero + Module Cards */}
+        <View className="flex-1 justify-center py-6">
+          <View className="mb-7 items-center">
+            <Text
+              style={WEB_SANS}
+              className="text-center text-[27px] font-bold leading-[33px] tracking-[-0.6px] text-white"
+            >
+              {"What would you like\nto do today?"}
+            </Text>
           </View>
 
-          {/* Card 2: Tailor Studio */}
-          <View
-            style={GLASS_CARD_STYLE}
-            className="rounded-[20px] border border-white/15 bg-[#121629]/85 p-4"
-          >
-            <View className="flex-row items-start gap-4">
-              <View
-                style={ICON_TILE_GLOW_STYLE}
-                className="h-[68px] w-[68px] items-center justify-center rounded-[16px] border border-white/15 bg-[#181F36]/95"
-              >
-                <TailorStudioHubIcon size={48} />
+          <View className="gap-5">
+            {/* Card 1: Job Hunter */}
+            <View
+              style={GLASS_CARD_STYLE}
+              className="rounded-[20px] border border-white/15 bg-[#121629]/85 p-5"
+            >
+              <View className="flex-row items-start gap-4">
+                <View
+                  style={ICON_TILE_GLOW_STYLE}
+                  className="h-[68px] w-[68px] items-center justify-center rounded-[16px] border border-white/15 bg-[#181F36]/95"
+                >
+                  <JobHunterHubIcon size={48} />
+                </View>
+
+                <View className="flex-1 pt-0.5">
+                  <Text
+                    style={WEB_SANS}
+                    className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
+                  >
+                    Job Hunter
+                  </Text>
+                  <Text
+                    style={WEB_SANS}
+                    className="mt-1 text-[13px] leading-[18.5px] text-[#94A3B8]"
+                  >
+                    Search 8 major job boards simultaneously with AI matching
+                  </Text>
+                </View>
               </View>
 
-              <View className="flex-1 pt-0.5">
-                <Text
-                  style={WEB_SANS}
-                  className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
+              <View className="mt-5 flex-row items-center justify-between gap-2">
+                <View className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5">
+                  <Text style={WEB_SANS} className="text-[11px] font-medium text-[#CBD5E1]">
+                    8 Boards • Live Ranking
+                  </Text>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Launch Hunter"
+                  onPress={() => router.push("/(tabs)/hunt")}
+                  style={CTA_GLOW_STYLE}
+                  className="h-[38px] flex-row items-center justify-center overflow-hidden rounded-full px-4 active:opacity-90"
                 >
-                  Tailor Studio
-                </Text>
-                <Text
-                  style={WEB_SANS}
-                  className="mt-1 text-[13px] leading-[18.5px] text-[#94A3B8]"
-                >
-                  Customize your CV & cover letter for any job description
-                </Text>
+                  <AuthButtonGradient />
+                  <View className="relative z-10 flex-row items-center gap-1.5">
+                    <Text style={WEB_SANS} className="text-[13px] font-semibold text-white">
+                      Launch Hunter
+                    </Text>
+                    <ArrowRight size={14} color="#FFFFFF" />
+                  </View>
+                </Pressable>
               </View>
             </View>
 
-            <View className="mt-4 flex-row items-center justify-between gap-2">
-              <View className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5">
-                <Text style={WEB_SANS} className="text-[11px] font-medium text-[#CBD5E1]">
-                  ATS Resume Optimizer
-                </Text>
+            {/* Card 2: Tailor Studio */}
+            <View
+              style={GLASS_CARD_STYLE}
+              className="rounded-[20px] border border-white/15 bg-[#121629]/85 p-5"
+            >
+              <View className="flex-row items-start gap-4">
+                <View
+                  style={ICON_TILE_GLOW_STYLE}
+                  className="h-[68px] w-[68px] items-center justify-center rounded-[16px] border border-white/15 bg-[#181F36]/95"
+                >
+                  <TailorStudioHubIcon size={48} />
+                </View>
+
+                <View className="flex-1 pt-0.5">
+                  <Text
+                    style={WEB_SANS}
+                    className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
+                  >
+                    Tailor Studio
+                  </Text>
+                  <Text
+                    style={WEB_SANS}
+                    className="mt-1 text-[13px] leading-[18.5px] text-[#94A3B8]"
+                  >
+                    Customize your CV & cover letter for any job description
+                  </Text>
+                </View>
               </View>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open Studio"
-                onPress={() => router.push("/(tabs)/studio")}
-                style={CTA_GLOW_STYLE}
-                className="h-[38px] flex-row items-center justify-center overflow-hidden rounded-full px-4 active:opacity-90"
-              >
-                <AuthButtonGradient />
-                <View className="relative z-10 flex-row items-center gap-1.5">
-                  <Text style={WEB_SANS} className="text-[13px] font-semibold text-white">
-                    Open Studio
+              <View className="mt-5 flex-row items-center justify-between gap-2">
+                <View className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5">
+                  <Text style={WEB_SANS} className="text-[11px] font-medium text-[#CBD5E1]">
+                    ATS Resume Optimizer
                   </Text>
-                  <ArrowRight size={14} color="#FFFFFF" />
                 </View>
-              </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Studio"
+                  onPress={() => router.push("/(tabs)/studio")}
+                  style={CTA_GLOW_STYLE}
+                  className="h-[38px] flex-row items-center justify-center overflow-hidden rounded-full px-4 active:opacity-90"
+                >
+                  <AuthButtonGradient />
+                  <View className="relative z-10 flex-row items-center gap-1.5">
+                    <Text style={WEB_SANS} className="text-[13px] font-semibold text-white">
+                      Open Studio
+                    </Text>
+                    <ArrowRight size={14} color="#FFFFFF" />
+                  </View>
+                </Pressable>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Bottom Quick Links Row */}
-        <View className="mt-5 flex-row gap-3">
+        {/* Bottom-Anchored Quick Links Row */}
+        <View className="flex-row gap-3 pt-2 pb-1">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Saved History"
             onPress={() => router.push("/(tabs)/outputs")}
-            className="h-[46px] flex-1 flex-row items-center justify-center gap-2 rounded-[14px] border border-white/15 bg-[#14182B]/90 px-3 active:bg-white/10"
+            className="h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-[14px] border border-white/15 bg-[#14182B]/90 px-3 active:bg-white/10"
           >
             <Clock size={16} color="#94A3B8" />
             <Text style={WEB_SANS} className="text-[13px] font-medium text-[#E2E8F0]">
@@ -272,7 +274,7 @@ export default function HomeHubScreen() {
             accessibilityRole="button"
             accessibilityLabel="Master Profiles"
             onPress={() => router.push("/(tabs)/settings")}
-            className="h-[46px] flex-1 flex-row items-center justify-center gap-2 rounded-[14px] border border-white/15 bg-[#14182B]/90 px-3 active:bg-white/10"
+            className="h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-[14px] border border-white/15 bg-[#14182B]/90 px-3 active:bg-white/10"
           >
             <Layers size={16} color="#94A3B8" />
             <Text style={WEB_SANS} className="text-[13px] font-medium text-[#E2E8F0]">

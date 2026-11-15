@@ -12,10 +12,12 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  iOS • Android • Web (Expo Router + NativeWind v4 + Dark Executive Theme)|
 |                                                                         |
 |  • (auth)/welcome     Welcome Screen ("Get Started" / "Sign In")        |
-|  • (auth)/login       Email/Password Sign In & Onboarding Sign Up       |
+|  • (auth)/login       Email/Password & Continue with Google (PKCE OAuth) |
 |  • (auth)/onboarding  Step 1: Gemini Key (SecureStore) + AI Engine Grid |
 |                       Step 2: Pre-Auth PDF CV Parser (4-Section Review) |
 |                               OR 4-Step Questionnaire Wizard            |
+|  • home               Post-Login Home Hub (Hunter, Studio, History,     |
+|                       Master Profiles, & Account Menu)                  |
 |  • (tabs)/hunt        8-Board JobSpy Hunter + SSE Live Progress         |
 |  • job/[id]           4-Score Fit Audit + Skills + "Yes, Tailor" CTA    |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
