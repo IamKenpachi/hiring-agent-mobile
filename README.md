@@ -72,11 +72,12 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 
 ## Setup Instructions
 
-### 1. Supabase Database & Storage (Optional for Cloud Production)
-1. Create a new Supabase project.
+### 1. Supabase Auth, Database & Storage
+1. Create a Supabase project.
 2. Open the **SQL Editor** and run `supabase/migrations/001_initial_schema.sql` to create `profiles`, `search_runs`, `ranked_jobs`, `tailored_outputs`, `token_usage`, RLS policies (`auth.uid() = user_id`), and the private `outputs-pdfs` storage bucket.
-3. Configure `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, and `SUPABASE_JWT_SECRET` in `backend/.env`.
-   - If `DATABASE_URL` is omitted, the backend defaults to local SQLite (`sqlite:///./data/hiring_mobile.db`).
+3. Configure `DATABASE_URL` (Session Pooler URI, percent-encoding any special characters in the password), `SUPABASE_URL`, `SUPABASE_KEY` (secret/service key), `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_JWT_SECRET` in `backend/.env`.
+   - When `SUPABASE_URL` and `SUPABASE_KEY` are set, `/api/auth/signup`, `/api/auth/login`, and `/api/auth/me` proxy directly to **Supabase Auth** (with immediate post-signup login and `ES256`/`HS256` JWT validation).
+   - If `DATABASE_URL` or Supabase keys are omitted (and in `pytest`), the backend falls back to local SQLite (`sqlite:///./data/hiring_mobile.db`) and local JWTs.
 
 ### 2. FastAPI + Google ADK Backend (`backend/`)
 ```bash
