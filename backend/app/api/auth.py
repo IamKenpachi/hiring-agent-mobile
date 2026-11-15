@@ -11,12 +11,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import AVAILABLE_MODELS, resolve_gemini_model
+from app.core.config import AVAILABLE_MODELS, SUPABASE_KEY, SUPABASE_URL, resolve_gemini_model
 from app.core.security import (
     CurrentUser,
     create_access_token,
     get_current_user,
     hash_password,
+    is_supabase_auth_enabled,
     verify_password,
 )
 from app.db.models import User
@@ -52,10 +53,73 @@ def _normalize_email(raw_email: str) -> str:
     return cleaned
 
 
+def _new_supabase_client() -> Any:
+    """Create a fresh per-request Supabase client so user auth sessions never leak across requests."""
+    from supabase import create_client
+
+    return create_client(SUPABASE_URL.strip(), SUPABASE_KEY.strip())
+
+
+def _extract_full_name(sb_user: Any) -> str:
+    meta = getattr(sb_user, "user_metadata", None) or {}
+    if isinstance(meta, dict):
+        return str(meta.get("full_name") or "").strip()
+    return ""
+
+
 @router.post("/signup")
 def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    """Create a new local user account and return a JWT access token."""
+    """Create a new user account via Supabase Auth (or local fallback) and return a JWT."""
     email = _normalize_email(req.email)
+    full_name = (req.full_name or "").strip()
+
+    if is_supabase_auth_enabled():
+        sb = _new_supabase_client()
+        try:
+            sb.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": req.password,
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": full_name},
+                }
+            )
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already" in msg or "exists" in msg or "registered" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email already exists.",
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not create account: {exc}",
+            ) from exc
+
+        try:
+            session_resp = sb.auth.sign_in_with_password({"email": email, "password": req.password})
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Account created, but automatic sign-in failed: {exc}",
+            ) from exc
+
+        session = getattr(session_resp, "session", None)
+        sb_user = getattr(session_resp, "user", None)
+        if not session or not getattr(session, "access_token", None) or not sb_user:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase Auth did not return an active session token.",
+            )
+        return {
+            "access_token": session.access_token,
+            "user": {
+                "id": str(sb_user.id),
+                "email": str(getattr(sb_user, "email", email) or email),
+                "full_name": _extract_full_name(sb_user) or full_name,
+            },
+        }
+
     existing = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(
@@ -66,7 +130,7 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
     user = User(
         id=str(uuid.uuid4()),
         email=email,
-        full_name=(req.full_name or "").strip(),
+        full_name=full_name,
         password_hash=hash_password(req.password),
     )
     db.add(user)
@@ -86,8 +150,35 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
 
 @router.post("/login")
 def login(req: LoginRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    """Authenticate an existing user with email and password and issue a JWT."""
+    """Authenticate an existing user via Supabase Auth (or local fallback) and return a JWT."""
     email = _normalize_email(req.email)
+
+    if is_supabase_auth_enabled():
+        sb = _new_supabase_client()
+        try:
+            session_resp = sb.auth.sign_in_with_password({"email": email, "password": req.password})
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+            ) from exc
+
+        session = getattr(session_resp, "session", None)
+        sb_user = getattr(session_resp, "user", None)
+        if not session or not getattr(session, "access_token", None) or not sb_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+            )
+        return {
+            "access_token": session.access_token,
+            "user": {
+                "id": str(sb_user.id),
+                "email": str(getattr(sb_user, "email", email) or email),
+                "full_name": _extract_full_name(sb_user),
+            },
+        }
+
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if user is None or not verify_password(req.password, user.password_hash):
         raise HTTPException(
@@ -112,6 +203,12 @@ def get_me(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return the authenticated user's identity."""
+    if is_supabase_auth_enabled():
+        return {
+            "id": current_user.id,
+            "email": current_user.email,
+            "full_name": "",
+        }
     user = db.execute(select(User).where(User.id == current_user.id)).scalar_one_or_none()
     return {
         "id": current_user.id,

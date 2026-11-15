@@ -6,9 +6,23 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.types import TypeDecorator
 
 Base = declarative_base()
+
+
+class UUIDString(TypeDecorator):
+    """Store UUID strings as native UUID on PostgreSQL and String on SQLite."""
+
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        return dialect.type_descriptor(String())
 
 
 def _utcnow() -> datetime:
@@ -24,7 +38,7 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
     email = Column(String, unique=True, nullable=False, index=True)
     full_name = Column(String, nullable=False, default="")
     password_hash = Column(String, nullable=False)
@@ -36,8 +50,8 @@ class Profile(Base):
 
     __tablename__ = "profiles"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
-    user_id = Column(String, nullable=False, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
+    user_id = Column(UUIDString, nullable=False, index=True)
     profile_name = Column(String, nullable=False, default="Default Profile")
     is_default = Column(Boolean, nullable=False, default=False)
     full_name = Column(String, nullable=False, default="")
@@ -63,9 +77,9 @@ class SearchRun(Base):
 
     __tablename__ = "search_runs"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
-    user_id = Column(String, nullable=False, index=True)
-    profile_id = Column(String, nullable=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
+    user_id = Column(UUIDString, nullable=False, index=True)
+    profile_id = Column(UUIDString, nullable=True)
     query = Column(String, nullable=False)
     location = Column(String, nullable=False, default="Remote")
     radius = Column(Integer, nullable=False, default=25)
@@ -92,9 +106,9 @@ class RankedJob(Base):
 
     __tablename__ = "ranked_jobs"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
-    search_run_id = Column(String, ForeignKey("search_runs.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(String, nullable=False, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
+    search_run_id = Column(UUIDString, ForeignKey("search_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUIDString, nullable=False, index=True)
     title = Column(String, nullable=False)
     company = Column(String, nullable=False, default="")
     location = Column(String, nullable=False, default="")
@@ -120,10 +134,10 @@ class TailoredOutput(Base):
 
     __tablename__ = "tailored_outputs"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
-    user_id = Column(String, nullable=False, index=True)
-    profile_id = Column(String, nullable=True)
-    ranked_job_id = Column(String, nullable=True, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
+    user_id = Column(UUIDString, nullable=False, index=True)
+    profile_id = Column(UUIDString, nullable=True)
+    ranked_job_id = Column(UUIDString, nullable=True, index=True)
     job_title = Column(String, nullable=False)
     company = Column(String, nullable=False, default="")
     job_url = Column(String, nullable=False, default="")
@@ -157,8 +171,8 @@ class TokenUsage(Base):
 
     __tablename__ = "token_usage"
 
-    id = Column(String, primary_key=True, default=_uuid_str)
-    user_id = Column(String, nullable=False, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid_str)
+    user_id = Column(UUIDString, nullable=False, index=True)
     model_name = Column(String, nullable=False)
     operation_type = Column(String, nullable=False)
     input_tokens = Column(Integer, nullable=False, default=0)

@@ -7,7 +7,8 @@ import hmac
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from functools import lru_cache
+from typing import Any, Optional
 
 import jwt
 from fastapi import Header, HTTPException, status
@@ -19,7 +20,30 @@ from app.core.config import (
     JWT_ALGORITHM,
     JWT_SECRET,
     SUPABASE_JWT_SECRET,
+    SUPABASE_KEY,
+    SUPABASE_URL,
 )
+
+
+def is_supabase_auth_enabled() -> bool:
+    """Return True when Supabase Auth credentials are configured outside unit tests."""
+    return bool(
+        SUPABASE_URL.strip()
+        and SUPABASE_KEY.strip()
+        and os.getenv("ENVIRONMENT", ENVIRONMENT).lower() != "test"
+    )
+
+
+@lru_cache(maxsize=2)
+def _cached_supabase_client(url: str, key: str) -> Any:
+    from supabase import create_client
+
+    return create_client(url, key)
+
+
+def get_supabase_client() -> Any:
+    """Return a cached Supabase client configured with project URL and secret/service key."""
+    return _cached_supabase_client(SUPABASE_URL.strip(), SUPABASE_KEY.strip())
 
 DEFAULT_DEV_USER_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_DEV_USER_EMAIL = "dev@hiringagent.local"
@@ -97,6 +121,19 @@ def _decode_jwt_token(token: str) -> CurrentUser:
         except HTTPException:
             raise
         except jwt.PyJWTError as exc:
+            last_error = exc
+
+    if is_supabase_auth_enabled():
+        try:
+            sb = get_supabase_client()
+            user_resp = sb.auth.get_user(token)
+            sb_user = getattr(user_resp, "user", None)
+            if sb_user and getattr(sb_user, "id", None):
+                return CurrentUser(
+                    id=str(sb_user.id),
+                    email=str(getattr(sb_user, "email", "") or ""),
+                )
+        except Exception as exc:
             last_error = exc
 
     raise HTTPException(

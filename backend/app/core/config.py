@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 except ImportError:
     pass
 
@@ -28,6 +28,7 @@ DATABASE_URL: str = os.getenv("DATABASE_URL") or "sqlite:///./data/hiring_mobile
 # === Supabase & Observability ===
 SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
 SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
 
