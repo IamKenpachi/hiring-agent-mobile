@@ -32,11 +32,11 @@
         {
           "iCloudContainerEnvironment": "Production"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     }
   }
 }
-

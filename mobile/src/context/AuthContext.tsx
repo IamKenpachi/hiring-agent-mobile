@@ -6,8 +6,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { Platform } from "react-native";
+import { makeRedirectUri } from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import { apiClient, DEFAULT_AVAILABLE_MODELS, syncApiCredentials } from "../lib/api";
 import { DEFAULT_GEMINI_MODEL, secureStorage } from "../lib/storage";
+import { getSupabaseAuthClient, isGoogleAuthConfigured } from "../lib/supabase";
 import type {
   ModelOption,
   Profile,
@@ -15,6 +19,8 @@ import type {
   TokenTelemetry,
   User,
 } from "../types";
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextValue {
   isReady: boolean;
@@ -36,6 +42,7 @@ interface AuthContextValue {
     password: string,
     draft: ProfileCreatePayload
   ) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   setGeminiKey: (key: string) => Promise<void>;
   setSelectedModel: (model: string) => Promise<void>;
@@ -100,11 +107,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     const hydrate = async () => {
       try {
-        const [storedToken, storedKey, storedModel] = await Promise.all([
+        let [storedToken, storedKey, storedModel] = await Promise.all([
           secureStorage.getAuthToken(),
           secureStorage.getGeminiApiKey(),
           secureStorage.getSelectedModel(),
         ]);
+
+        // Recover Supabase Google OAuth session on web redirect return (PKCE ?code= or hash tokens)
+        let pendingDraft = await secureStorage.getPendingOnboardingDraft();
+        if (isGoogleAuthConfigured) {
+          try {
+            const supabase = getSupabaseAuthClient();
+            const { data } = await supabase.auth.getSession();
+            if (data?.session?.access_token) {
+              storedToken = data.session.access_token;
+              await secureStorage.setAuthToken(storedToken);
+            }
+            if (Platform.OS === "web" && typeof window !== "undefined") {
+              const url = new URL(window.location.href);
+              if (
+                url.searchParams.has("code") ||
+                url.searchParams.has("error") ||
+                url.hash.includes("access_token")
+              ) {
+                window.history.replaceState({}, document.title, url.pathname);
+              }
+            }
+          } catch {
+            // Fall back to existing token if Supabase session lookup fails
+          }
+        }
 
         if (!mounted) return;
         const cleanKey = storedKey || "";
@@ -119,6 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(storedToken);
         setGeminiApiKeyState(cleanKey);
         setSelectedModelState(cleanModel);
+        if (pendingDraft) {
+          setOnboardingDraft(pendingDraft);
+        }
 
         // Non-blocking warm-up ping
         void pingHealth();
@@ -128,7 +163,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const me = await apiClient.getMe();
             if (!mounted) return;
             setUser(me);
-            await Promise.all([refreshProfiles(), refreshTelemetry()]);
+            const existingProfiles = await refreshProfiles();
+            if (!mounted) return;
+
+            if (pendingDraft && existingProfiles.length === 0) {
+              const created = await apiClient.createProfile({
+                ...pendingDraft,
+                email: pendingDraft.email?.trim() || me.email,
+                is_default: true,
+              });
+              if (!mounted) return;
+              setProfiles([created]);
+              await secureStorage.setPendingOnboardingDraft(null);
+              pendingDraft = null;
+              setOnboardingDraft(null);
+            }
+            await refreshTelemetry();
           } catch {
             // Token expired or invalid -> clear auth state
             if (!mounted) return;
@@ -186,6 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       setProfiles([created]);
+      await secureStorage.setPendingOnboardingDraft(null);
       setOnboardingDraft(null);
       setUser(auth.user);
       setToken(auth.access_token);
@@ -194,7 +245,137 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refreshTelemetry]
   );
 
+  const applyAuthenticatedToken = useCallback(
+    async (accessToken: string, fallbackEmail = "", fallbackName = "") => {
+      await secureStorage.setAuthToken(accessToken);
+      syncApiCredentials({ token: accessToken });
+
+      let me: User = { id: "", email: fallbackEmail, full_name: fallbackName };
+      try {
+        me = await apiClient.getMe();
+      } catch {
+        // Use OAuth profile fallback if /me fails temporarily
+      }
+
+      const existingProfiles = await refreshProfiles();
+      const draftToPersist = onboardingDraft || (await secureStorage.getPendingOnboardingDraft());
+
+      if (draftToPersist && existingProfiles.length === 0) {
+        const created = await apiClient.createProfile({
+          ...draftToPersist,
+          email: draftToPersist.email?.trim() || me.email || fallbackEmail,
+          is_default: true,
+        });
+        setProfiles([created]);
+      }
+
+      await secureStorage.setPendingOnboardingDraft(null);
+      setOnboardingDraft(null);
+      setUser(me);
+      setToken(accessToken);
+      await refreshTelemetry();
+    },
+    [onboardingDraft, refreshProfiles, refreshTelemetry]
+  );
+
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabaseAuthClient();
+    if (onboardingDraft) {
+      await secureStorage.setPendingOnboardingDraft(onboardingDraft);
+    }
+
+    if (Platform.OS === "web") {
+      const redirectTo =
+        typeof window !== "undefined" ? window.location.origin : undefined;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.url && typeof window !== "undefined") {
+        window.location.assign(data.url);
+      }
+      return;
+    }
+
+    // Native iOS / Android PKCE flow using custom scheme hiring-agent://auth/callback
+    const redirectTo = makeRedirectUri({
+      scheme: "hiring-agent",
+      path: "auth/callback",
+    });
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) throw error;
+    if (!data?.url) {
+      throw new Error("Could not start Google sign-in URL.");
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success" || !result.url) {
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return;
+      }
+      throw new Error("Google authentication did not complete.");
+    }
+
+    const parsed = new URL(result.url);
+    const hashParams = new URLSearchParams(
+      parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash
+    );
+    const errorDesc =
+      parsed.searchParams.get("error_description") || hashParams.get("error_description");
+    if (errorDesc) {
+      throw new Error(errorDesc);
+    }
+
+    const code = parsed.searchParams.get("code");
+    let session = null;
+    if (code) {
+      const exchanged = await supabase.auth.exchangeCodeForSession(code);
+      if (exchanged.error) throw exchanged.error;
+      session = exchanged.data.session;
+    } else {
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+      if (accessToken && refreshToken) {
+        const res = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (res.error) throw res.error;
+        session = res.data.session;
+      }
+    }
+
+    if (!session?.access_token) {
+      throw new Error("Google sign-in completed without a valid session token.");
+    }
+
+    const meta = (session.user?.user_metadata || {}) as Record<string, unknown>;
+    await applyAuthenticatedToken(
+      session.access_token,
+      session.user?.email || "",
+      String(meta.full_name || meta.name || "")
+    );
+  }, [applyAuthenticatedToken, onboardingDraft]);
+
   const signOut = useCallback(async () => {
+    if (isGoogleAuthConfigured) {
+      try {
+        await getSupabaseAuthClient().auth.signOut();
+      } catch {
+        // Ignore remote signOut failure on offline logout
+      }
+    }
     await secureStorage.clearAuthSession();
     syncApiCredentials({ token: null });
     setToken(null);
@@ -248,6 +429,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signUpWithOnboarding,
+      signInWithGoogle,
       signOut,
       setGeminiKey,
       setSelectedModel,
@@ -271,6 +453,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signUpWithOnboarding,
+      signInWithGoogle,
       signOut,
       setGeminiKey,
       setSelectedModel,

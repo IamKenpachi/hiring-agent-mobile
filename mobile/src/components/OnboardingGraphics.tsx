@@ -2,7 +2,9 @@ import React, { useId } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, {
+  Circle,
   Defs,
+  Line,
   LinearGradient,
   Path,
   RadialGradient,
@@ -31,7 +33,7 @@ function useSvgId(prefix: string): string {
 export function AuthButtonGradient() {
   const gradId = useSvgId("btnGrad");
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
       <Svg width="100%" height="100%" viewBox="0 0 345 50" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -41,6 +43,55 @@ export function AuthButtonGradient() {
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="345" height="50" fill={`url(#${gradId})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * Dark frosted metallic-glass pill surface for the "Continue with Google" CTA matching google_auth_mockup.jpg.
+ */
+export function GoogleButtonSurface() {
+  const glassGradId = useSvgId("googleGlass");
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
+      <Svg width="100%" height="100%" viewBox="0 0 345 50" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id={glassGradId} x1="25%" y1="0%" x2="75%" y2="100%">
+            <Stop offset="0%" stopColor="#3B425C" stopOpacity="0.82" />
+            <Stop offset="42%" stopColor="#1D2235" stopOpacity="0.92" />
+            <Stop offset="100%" stopColor="#101423" stopOpacity="0.98" />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="345" height="50" fill={`url(#${glassGradId})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * Official 4-color Google "G" mark used inside the "Continue with Google" button.
+ */
+export function GoogleGIcon({ size = 20 }: { size?: number }) {
+  return (
+    <View style={{ width: size, height: size, position: "relative", zIndex: 2 }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+          fill="#4285F4"
+        />
+        <Path
+          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+          fill="#34A853"
+        />
+        <Path
+          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+          fill="#FBBC05"
+        />
+        <Path
+          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+          fill="#EA4335"
+        />
       </Svg>
     </View>
   );
@@ -297,5 +348,119 @@ export function StepProgressHeader({
         })}
       </View>
     </View>
+  );
+}
+
+/**
+ * Compact luminous cyan-to-violet briefcase mark for the Home Hub top header.
+ */
+export function HubBrandBriefcaseIcon({ size = 34 }: { size?: number }) {
+  const strokeId = useSvgId("hubCaseStroke");
+  const fillId = useSvgId("hubCaseFill");
+  return (
+    <Svg width={size} height={size * 0.9} viewBox="0 0 40 36" fill="none">
+      <Defs>
+        <LinearGradient id={strokeId} x1="4" y1="6" x2="36" y2="32" gradientUnits="userSpaceOnUse">
+          <Stop offset="0%" stopColor="#38BDF8" />
+          <Stop offset="55%" stopColor="#818CF8" />
+          <Stop offset="100%" stopColor="#C084FC" />
+        </LinearGradient>
+        <LinearGradient id={fillId} x1="6" y1="9" x2="32" y2="30" gradientUnits="userSpaceOnUse">
+          <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.18" />
+          <Stop offset="100%" stopColor="#A855F7" stopOpacity="0.16" />
+        </LinearGradient>
+      </Defs>
+      <Path
+        d="M14.5 11V8.5C14.5 7.12 15.62 6 17 6H23C24.38 6 25.5 7.12 25.5 8.5V11"
+        stroke={`url(#${strokeId})`}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+      />
+      <Rect
+        x="5"
+        y="11"
+        width="30"
+        height="21"
+        rx="5"
+        fill={`url(#${fillId})`}
+        stroke={`url(#${strokeId})`}
+        strokeWidth={2.2}
+      />
+      <Path
+        d="M5 18C5 21.5 9.5 23 20 23C30.5 23 35 21.5 35 18"
+        stroke={`url(#${strokeId})`}
+        strokeWidth={1.8}
+        strokeOpacity="0.9"
+      />
+      <Rect x="18" y="21.2" width="4" height="3.6" rx="1" fill="#E0E7FF" />
+      <Path
+        d="M34.5 2.5L35.35 5.15L38 6L35.35 6.85L34.5 9.5L33.65 6.85L31 6L33.65 5.15L34.5 2.5Z"
+        fill="#E0F2FE"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * Glowing cyan-to-indigo target radar icon matching Card 1 of the Home Hub mockup.
+ */
+export function JobHunterHubIcon({ size = 42 }: { size?: number }) {
+  const gradId = useSvgId("radarGrad");
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <Defs>
+        <LinearGradient id={gradId} x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+          <Stop offset="0%" stopColor="#38BDF8" />
+          <Stop offset="55%" stopColor="#60A5FA" />
+          <Stop offset="100%" stopColor="#A78BFA" />
+        </LinearGradient>
+      </Defs>
+      <Circle cx="24" cy="24" r="16" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeOpacity="0.92" />
+      <Circle cx="24" cy="24" r="10.5" stroke={`url(#${gradId})`} strokeWidth={2} strokeOpacity="0.82" />
+      <Circle cx="24" cy="24" r="5" stroke={`url(#${gradId})`} strokeWidth={1.8} strokeOpacity="0.75" />
+      <Line x1="24" y1="5.5" x2="24" y2="12" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
+      <Line x1="24" y1="36" x2="24" y2="42.5" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
+      <Line x1="5.5" y1="24" x2="12" y2="24" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
+      <Line x1="36" y1="24" x2="42.5" y2="24" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
+      <Line x1="24" y1="24" x2="34.5" y2="13.5" stroke="#BAE6FD" strokeWidth={2.2} strokeLinecap="round" />
+      <Circle cx="24" cy="24" r="2.2" fill="#E0F2FE" />
+    </Svg>
+  );
+}
+
+/**
+ * Glowing cyan-to-purple document + sparkle icon matching Card 2 of the Home Hub mockup.
+ */
+export function TailorStudioHubIcon({ size = 42 }: { size?: number }) {
+  const gradId = useSvgId("studioGrad");
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <Defs>
+        <LinearGradient id={gradId} x1="8" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+          <Stop offset="0%" stopColor="#38BDF8" />
+          <Stop offset="55%" stopColor="#818CF8" />
+          <Stop offset="100%" stopColor="#C084FC" />
+        </LinearGradient>
+      </Defs>
+      <Path
+        d="M14 8H27L35 16V37C35 38.66 33.66 40 32 40H14C12.34 40 11 38.66 11 37V11C11 9.34 12.34 8 14 8Z"
+        fill="#38BDF8"
+        fillOpacity="0.08"
+        stroke={`url(#${gradId})`}
+        strokeWidth={2.2}
+        strokeLinejoin="round"
+      />
+      <Path d="M27 8V16H35" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeLinejoin="round" />
+      <Line x1="16.5" y1="21.5" x2="27" y2="21.5" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeLinecap="round" />
+      <Line x1="16.5" y1="27" x2="29.5" y2="27" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeLinecap="round" />
+      <Line x1="16.5" y1="32.5" x2="23.5" y2="32.5" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeLinecap="round" />
+      <Path
+        d="M34.5 25.5C35.25 30.2 36.8 31.75 41.5 32.5C36.8 33.25 35.25 34.8 34.5 39.5C33.75 34.8 32.2 33.25 27.5 32.5C32.2 31.75 33.75 30.2 34.5 25.5Z"
+        fill="#A78BFA"
+        stroke="#E0E7FF"
+        strokeWidth={1.3}
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }

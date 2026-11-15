@@ -1,12 +1,25 @@
 import React from "react";
-import { Tabs } from "expo-router";
-import { FileCheck2, Radar, Settings, Wand2 } from "lucide-react-native";
+import { Pressable } from "react-native";
+import { Tabs, useRouter } from "expo-router";
+import { FileCheck2, Home, Radar, Settings, Wand2 } from "lucide-react-native";
 import { COLORS } from "../../src/constants/theme";
 
 export default function TabsLayout() {
+  const router = useRouter();
+
   return (
     <Tabs
       screenOptions={{
+        headerLeft: () => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Home"
+            onPress={() => router.replace("/home")}
+            className="ml-4 h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:bg-white/10"
+          >
+            <Home size={16} color="#CBD5E1" />
+          </Pressable>
+        ),
         headerStyle: {
           backgroundColor: COLORS.background,
         },

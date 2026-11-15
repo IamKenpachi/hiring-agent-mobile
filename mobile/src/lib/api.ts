@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import { DEFAULT_GEMINI_MODEL, secureStorage } from "./storage";
 import type {
   AuthResponse,
@@ -21,9 +22,36 @@ import type {
   User,
 } from "../types";
 
-export const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:8001"
-).replace(/\/+$/, "");
+function resolveApiBaseUrl(): string {
+  const configured = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:8001")
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (Platform.OS === "web") {
+    return configured;
+  }
+
+  // On physical phones in Expo Go, localhost refers to the phone itself.
+  // Automatically fall back to the Metro dev host IP when needed.
+  if (
+    configured.includes("://localhost") ||
+    configured.includes("://127.0.0.1")
+  ) {
+    const hostUri =
+      Constants.expoConfig?.hostUri ||
+      (Constants as unknown as { manifest2?: { extra?: { expoClient?: { hostUri?: string } } } })
+        .manifest2?.extra?.expoClient?.hostUri ||
+      "";
+    const devHost = hostUri.split(":")[0]?.trim();
+    if (devHost) {
+      return configured.replace(/localhost|127\.0\.0\.1/, devHost);
+    }
+  }
+
+  return configured;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export const DEFAULT_AVAILABLE_MODELS: ModelOption[] = [
   {
@@ -152,18 +180,24 @@ async function request<T>(
   const authHeaders = await buildAuthHeaders(overrides, !isFormData);
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
-  const res = await fetch(url, {
-    method,
-    headers: {
-      ...authHeaders,
-      ...headers,
-    },
-    body: isFormData
-      ? (body as FormData)
-      : body !== undefined
-        ? JSON.stringify(body)
-        : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        ...authHeaders,
+        ...headers,
+      },
+      body: isFormData
+        ? (body as FormData)
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network request failed";
+    throw new ApiError(`${msg} (${url})`, 0);
+  }
 
   const contentType = res.headers.get("content-type") || "";
   let parsed: unknown = null;

@@ -1,10 +1,13 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
+import type { ProfileCreatePayload } from "../types";
+
 export const STORAGE_KEYS = {
   GEMINI_API_KEY: "gemini_api_key",
   AUTH_TOKEN: "auth_token",
   SELECTED_MODEL: "selected_model",
+  PENDING_ONBOARDING_DRAFT: "pending_onboarding_draft",
 } as const;
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
@@ -98,8 +101,29 @@ export const secureStorage = {
     await setRawItem(STORAGE_KEYS.SELECTED_MODEL, model || DEFAULT_GEMINI_MODEL);
   },
 
+  async getPendingOnboardingDraft(): Promise<ProfileCreatePayload | null> {
+    const raw = await getRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as ProfileCreatePayload;
+    } catch {
+      return null;
+    }
+  },
+
+  async setPendingOnboardingDraft(draft: ProfileCreatePayload | null): Promise<void> {
+    if (!draft) {
+      await deleteRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT);
+    } else {
+      await setRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT, JSON.stringify(draft));
+    }
+  },
+
   async clearAuthSession(): Promise<void> {
-    await deleteRawItem(STORAGE_KEYS.AUTH_TOKEN);
+    await Promise.all([
+      deleteRawItem(STORAGE_KEYS.AUTH_TOKEN),
+      deleteRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT),
+    ]);
   },
 };
 

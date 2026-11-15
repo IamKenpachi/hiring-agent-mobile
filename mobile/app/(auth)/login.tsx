@@ -14,6 +14,8 @@ import { ArrowLeft, Eye, EyeOff } from "lucide-react-native";
 import {
   AuthButtonGradient,
   AuthHeroBriefcase,
+  GoogleButtonSurface,
+  GoogleGIcon,
   OnboardingScreenFrame,
   WEB_SANS,
 } from "../../src/components/OnboardingGraphics";
@@ -23,7 +25,7 @@ import { ApiError } from "../../src/lib/api";
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
-  const { signIn, signUp, signUpWithOnboarding, onboardingDraft } = useAuth();
+  const { signIn, signUp, signUpWithOnboarding, signInWithGoogle, onboardingDraft } = useAuth();
 
   const [mode, setMode] = useState<"signin" | "signup">(
     params.mode === "signup" || onboardingDraft ? "signup" : "signin"
@@ -32,6 +34,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,6 +88,24 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleAuth = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Google authentication failed. Please try again.";
+      setError(msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <OnboardingScreenFrame strongGlow>
       <KeyboardAvoidingView
@@ -113,13 +134,13 @@ export default function LoginScreen() {
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: 26,
-            paddingTop: 28,
-            paddingBottom: 30,
+            paddingTop: 18,
+            paddingBottom: 26,
           }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Glowing Hero */}
-          <View className="items-center mt-2">
+          <View className="items-center mt-1">
             <View className="mb-4">
               <AuthHeroBriefcase size={88} />
             </View>
@@ -140,7 +161,7 @@ export default function LoginScreen() {
           </View>
 
           {/* Clean Email + Password Form (without Sign In / Sign Up pills on top) */}
-          <View className="mt-10 gap-4">
+          <View className="mt-7 gap-3.5">
             {error ? (
               <View className="rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5">
                 <Text className="text-xs font-medium text-red-200">{error}</Text>
@@ -195,23 +216,66 @@ export default function LoginScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={isSignUpFlow ? "Create Account & Start Hunting" : "Sign In"}
-              disabled={loading}
+              disabled={loading || googleLoading}
               onPress={() => void handleSubmit()}
-              className="mt-3 h-[50px] w-full flex-row items-center justify-center gap-2 overflow-hidden rounded-full active:opacity-90"
+              className="mt-2.5 h-[50px] w-full flex-row items-center justify-center overflow-hidden rounded-full active:opacity-90"
             >
               <AuthButtonGradient />
-              {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
-              <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
-                {loading
-                  ? "Authenticating..."
-                  : isSignUpFlow
-                    ? "Create Account & Start Hunting"
-                    : "Sign In"}
+              <View className="relative z-10 flex-row items-center justify-center gap-2">
+                {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
+                <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
+                  {loading
+                    ? "Authenticating..."
+                    : isSignUpFlow
+                      ? "Create Account & Start Hunting"
+                      : "Sign In"}
+                </Text>
+              </View>
+            </Pressable>
+
+            <View className="flex-row items-center gap-3">
+              <View className="h-[1px] flex-1 bg-white/10" />
+              <Text style={WEB_SANS} className="text-[12px] font-medium text-[#64748B]">
+                or
               </Text>
+              <View className="h-[1px] flex-1 bg-white/10" />
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+              disabled={loading || googleLoading}
+              onPress={() => void handleGoogleAuth()}
+              style={
+                Platform.OS === "web"
+                  ? ({
+                      boxShadow: "0 0 24px rgba(124, 58, 237, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.28)",
+                    } as unknown as Record<string, string>)
+                  : {
+                      shadowColor: "#7C3AED",
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 12,
+                      elevation: 6,
+                    }
+              }
+              className="h-[50px] w-full flex-row items-center justify-center overflow-hidden rounded-full border border-white/25 active:opacity-90"
+            >
+              <GoogleButtonSurface />
+              <View className="relative z-10 flex-row items-center justify-center gap-2.5">
+                {googleLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <GoogleGIcon size={19} />
+                )}
+                <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
+                  {googleLoading ? "Connecting to Google..." : "Continue with Google"}
+                </Text>
+              </View>
             </Pressable>
           </View>
 
-          <View className="mt-auto pt-8 items-center">
+          <View className="mt-auto pt-6 items-center">
             {isSignUpFlow ? (
               <Pressable onPress={() => setMode("signin")} className="py-2">
                 <Text style={WEB_SANS} className="text-[12.5px] text-[#94A3B8]">
