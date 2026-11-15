@@ -24,6 +24,55 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+_PLACEHOLDER_KEY_PREFIXES = (
+    "test-",
+    "dummy",
+    "fake",
+    "mock",
+    "invalid",
+    "placeholder",
+    "sk-test",
+)
+
+
+class GeminiAuthError(RuntimeError):
+    """Raised when Google Gemini rejects the supplied API key (e.g. API_KEY_INVALID)."""
+
+
+def is_placeholder_gemini_key(api_key: Optional[str]) -> bool:
+    """Return True if the API key is empty, implausibly short, or an explicit test placeholder."""
+    cleaned = (api_key or "").strip()
+    if not cleaned or len(cleaned) < 12:
+        return True
+    return cleaned.lower().startswith(_PLACEHOLDER_KEY_PREFIXES)
+
+
+def _is_gemini_auth_error(exc: Exception) -> bool:
+    """Detect API-key or credential rejections from Google GenAI without matching transient 429/5xx."""
+    upper = str(exc).upper()
+    if any(
+        marker in upper
+        for marker in (
+            "API_KEY_INVALID",
+            "API KEY NOT VALID",
+            "API_KEY_EXPIRED",
+            "API KEY EXPIRED",
+            "API_KEY_SERVICE_BLOCKED",
+            "PERMISSION_DENIED",
+        )
+    ):
+        return True
+    return getattr(exc, "code", None) in (401, 403)
+
+
+def _raise_if_gemini_auth_error(exc: Exception) -> None:
+    """Re-raise invalid/expired key failures as GeminiAuthError instead of falling back silently."""
+    if _is_gemini_auth_error(exc):
+        raise GeminiAuthError(
+            "Google Gemini rejected your API key (invalid, expired, or unauthorized). "
+            "Please update a valid Google AI Studio key in Settings."
+        ) from exc
+
 # Known technical and domain terms prioritized during deterministic skill/keyword extraction.
 _CURATED_SKILLS_CATALOG: List[str] = [
     "Python",
@@ -503,17 +552,23 @@ def create_revision_copilot_agent(
 
 
 def _should_use_fallback_directly(api_key: Optional[str]) -> bool:
-    """Detect offline/test/placeholder keys so unit tests never stall on external network calls."""
+    """Return True only when explicit offline/test fallback mode is active."""
     if os.getenv("HIRING_AGENT_FORCE_FALLBACK", "").lower() in {"1", "true", "yes"}:
         return True
-    cleaned = (api_key or "").strip()
-    if not cleaned:
+    if os.getenv("ENVIRONMENT", "development").lower() == "test" and is_placeholder_gemini_key(api_key):
         return True
-    lowered = cleaned.lower()
-    if lowered.startswith(("test-", "dummy", "fake", "mock", "invalid", "placeholder", "sk-test")):
+    return False
+
+
+def _is_stub_fallback_or_validate_key(api_key: Optional[str]) -> bool:
+    """Return True for offline test/forced fallback; reject placeholder keys in live environments."""
+    if _should_use_fallback_directly(api_key):
         return True
-    if len(cleaned) < 12:
-        return True
+    if is_placeholder_gemini_key(api_key):
+        raise GeminiAuthError(
+            "Your Gemini API key appears invalid or is a placeholder. "
+            "Please enter a valid Google AI Studio key in Settings."
+        )
     return False
 
 
@@ -1466,9 +1521,10 @@ def parse_profile_from_text(
 ) -> Tuple[Dict[str, Any], int, int]:
     """Use ADK ProfileParserAgent (with deterministic fallback) to parse raw resume text."""
     resolved_model = resolve_gemini_model(model_name)
+    stub_mode = _is_stub_fallback_or_validate_key(api_key)
     prompt = f"Parse the following candidate resume/CV text into structured JSON and clean Markdown:\n\n{raw_text}"
 
-    if not _should_use_fallback_directly(api_key):
+    if not stub_mode:
         try:
             agent = create_profile_parser_agent(api_key=api_key, model_name=resolved_model)
             state, in_tok, out_tok = _run_coro_sync(
@@ -1488,10 +1544,13 @@ def parse_profile_from_text(
                     in_tok, out_tok = _estimate_tokens(prompt, data["raw_markdown"])
                 return data, in_tok, out_tok
         except Exception as exc:
+            _raise_if_gemini_auth_error(exc)
             logger.warning("ADK ProfileParserAgent falling back to deterministic parser: %s", exc)
 
     fallback_data = _fallback_parse_profile(raw_text)
-    in_tok, out_tok = _estimate_tokens(prompt, fallback_data["raw_markdown"])
+    in_tok, out_tok = (
+        _estimate_tokens(prompt, fallback_data["raw_markdown"]) if stub_mode else (0, 0)
+    )
     return fallback_data, in_tok, out_tok
 
 
@@ -1502,9 +1561,10 @@ def extract_jd_metadata(
 ) -> Tuple[Dict[str, Any], int, int]:
     """Use ADK JDExtractorAgent (with deterministic fallback) to parse pasted job descriptions."""
     resolved_model = resolve_gemini_model(model_name)
+    stub_mode = _is_stub_fallback_or_validate_key(api_key)
     prompt = f"Extract job_title, company, location, salary, core_requirements, and summary from:\n\n{raw_text}"
 
-    if not _should_use_fallback_directly(api_key):
+    if not stub_mode:
         try:
             agent = create_jd_extractor_agent(api_key=api_key, model_name=resolved_model)
             state, in_tok, out_tok = _run_coro_sync(
@@ -1522,10 +1582,11 @@ def extract_jd_metadata(
                     in_tok, out_tok = _estimate_tokens(prompt, json.dumps(data))
                 return data, in_tok, out_tok
         except Exception as exc:
+            _raise_if_gemini_auth_error(exc)
             logger.warning("ADK JDExtractorAgent falling back to deterministic extractor: %s", exc)
 
     fallback_data = _fallback_extract_jd(raw_text)
-    in_tok, out_tok = _estimate_tokens(prompt, json.dumps(fallback_data))
+    in_tok, out_tok = _estimate_tokens(prompt, json.dumps(fallback_data)) if stub_mode else (0, 0)
     return fallback_data, in_tok, out_tok
 
 
@@ -1540,6 +1601,7 @@ def rank_jobs_batch(
         return [], 0, 0
 
     resolved_model = resolve_gemini_model(model_name)
+    stub_mode = _is_stub_fallback_or_validate_key(api_key)
     scored_jobs: List[Dict[str, Any]] = []
     total_in = 0
     total_out = 0
@@ -1568,7 +1630,7 @@ def rank_jobs_batch(
         batch_scores_by_idx: Dict[int, JobScoreItemOutput] = {}
         used_adk = False
 
-        if not _should_use_fallback_directly(api_key):
+        if not stub_mode:
             try:
                 agent = create_job_matcher_agent(api_key=api_key, model_name=resolved_model)
                 state, in_tok, out_tok = _run_coro_sync(
@@ -1587,6 +1649,7 @@ def rank_jobs_batch(
                     total_out += out_tok or _estimate_tokens(prompt, json.dumps(parsed.model_dump()))[1]
                     used_adk = True
             except Exception as exc:
+                _raise_if_gemini_auth_error(exc)
                 logger.warning("ADK JobMatcherAgent batch fallback triggered: %s", exc)
 
         for idx, raw_job in enumerate(batch):
@@ -1612,7 +1675,7 @@ def rank_jobs_batch(
                     str(raw_job.get("description") or ""),
                 )
                 merged.update(eval_res)
-                if not used_adk and idx == len(batch) - 1:
+                if not used_adk and idx == len(batch) - 1 and stub_mode:
                     est_in, est_out = _estimate_tokens(prompt, json.dumps(eval_res))
                     total_in += est_in
                     total_out += est_out
@@ -1634,6 +1697,7 @@ def run_application_tailor_pipeline(
 ) -> Tuple[Dict[str, Any], int, int]:
     """Execute ADK SequentialAgent ApplicationTailorPipeline (CVStrategist + CoverLetterWriter)."""
     resolved_model = resolve_gemini_model(model_name)
+    stub_mode = _is_stub_fallback_or_validate_key(api_key)
     effective_tone = (tone or "Executive & Formal").strip() or "Executive & Formal"
     prompt = (
         f"Target Role: {job_title} at {company}\n"
@@ -1643,7 +1707,7 @@ def run_application_tailor_pipeline(
         f"Target Job Description:\n{job_description}\n"
     )
 
-    if not _should_use_fallback_directly(api_key):
+    if not stub_mode:
         try:
             pipeline = create_application_tailor_pipeline(
                 tone=effective_tone,
@@ -1697,6 +1761,7 @@ def run_application_tailor_pipeline(
                     in_tok, out_tok = _estimate_tokens(prompt, result["cv_markdown"] + result["cover_letter_markdown"])
                 return result, in_tok, out_tok
         except Exception as exc:
+            _raise_if_gemini_auth_error(exc)
             logger.warning("ADK ApplicationTailorPipeline falling back to deterministic synthesis: %s", exc)
 
     fallback_result = _fallback_tailor_pipeline(
@@ -1707,9 +1772,13 @@ def run_application_tailor_pipeline(
         custom_capabilities=custom_capabilities,
         tone=effective_tone,
     )
-    in_tok, out_tok = _estimate_tokens(
-        prompt,
-        fallback_result["cv_markdown"] + "\n" + fallback_result["cover_letter_markdown"],
+    in_tok, out_tok = (
+        _estimate_tokens(
+            prompt,
+            fallback_result["cv_markdown"] + "\n" + fallback_result["cover_letter_markdown"],
+        )
+        if stub_mode
+        else (0, 0)
     )
     return fallback_result, in_tok, out_tok
 
@@ -1729,6 +1798,7 @@ def run_revision_copilot(
 ) -> Tuple[Dict[str, Any], int, int]:
     """Use ADK RevisionCopilotAgent to revise CV or Cover Letter and recompute 4 scores."""
     resolved_model = resolve_gemini_model(model_name)
+    stub_mode = _is_stub_fallback_or_validate_key(api_key)
     clean_doc_type = "cover_letter" if str(doc_type).lower() in {"cover_letter", "cl"} else "cv"
     current_doc = current_cv_markdown if clean_doc_type == "cv" else current_cover_letter_markdown
     history_snippet = "\n".join(
@@ -1744,7 +1814,7 @@ def run_revision_copilot(
         f"User Revision Instruction:\n{instruction}\n"
     )
 
-    if not _should_use_fallback_directly(api_key):
+    if not stub_mode:
         try:
             agent = create_revision_copilot_agent(
                 doc_type=clean_doc_type,
@@ -1775,6 +1845,7 @@ def run_revision_copilot(
                     in_tok, out_tok = _estimate_tokens(prompt, result["modified_markdown"])
                 return result, in_tok, out_tok
         except Exception as exc:
+            _raise_if_gemini_auth_error(exc)
             logger.warning("ADK RevisionCopilotAgent falling back to deterministic revision: %s", exc)
 
     fallback_res = _fallback_revision(
@@ -1787,5 +1858,7 @@ def run_revision_copilot(
         job_description=job_description,
         profile_markdown=profile_markdown,
     )
-    in_tok, out_tok = _estimate_tokens(prompt, fallback_res["modified_markdown"])
+    in_tok, out_tok = (
+        _estimate_tokens(prompt, fallback_res["modified_markdown"]) if stub_mode else (0, 0)
+    )
     return fallback_res, in_tok, out_tok

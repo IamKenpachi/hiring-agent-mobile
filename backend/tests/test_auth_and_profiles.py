@@ -5,8 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event, select
 
+from app.api import profiles as profiles_api
+from app.db.models import Profile, TokenUsage
+from app.main import app
 from app.services.pdf_service import generate_pdf_file
 
 
@@ -247,3 +252,211 @@ Python, SQL, Snowflake, dbt, Tableau, Airflow
     assert preview["file_size_bytes"] == len(pdf_bytes)
     assert "karim.faiq@example.com" in preview["email"].lower()
     assert len(preview["skills"]) >= 3
+
+
+def test_upload_profile_pdf_strips_nul_bytes(
+    isolated_env,
+    client: TestClient,
+    auth_headers: Dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_raw_texts = []
+
+    def _fake_parse(raw_text: str, api_key: str, model_name: str):
+        captured_raw_texts.append(raw_text)
+        return (
+            {
+                "full_name": "Nadia\x00 Vance",
+                "email": "nadia\x00@example.com",
+                "phone": "+44 7700\x00 900111",
+                "location": "London\x00, UK",
+                "linkedin_url": "",
+                "github_url": "",
+                "portfolio_url": "",
+                "summary": "Data\x00 Analyst focused on SQL.",
+                "skills": ["Python\x00", "SQL"],
+                "experience": [{"role": "Junior\x00 Data Analyst", "company": "Acme\x00"}],
+                "projects": [],
+                "education": [],
+                "certifications": [],
+                "raw_markdown": "# Nadia\x00 Vance\nData\x00 Analyst",
+            },
+            851,
+            360,
+        )
+
+    monkeypatch.setattr(profiles_api, "parse_profile_from_text", _fake_parse)
+
+    # Pure NUL-byte payload is rejected cleanly as unreadable
+    empty_res = client.post(
+        "/api/profiles/upload-pdf",
+        headers=auth_headers,
+        files={"file": ("empty.txt", b"\x00\x00\x00", "text/plain")},
+    )
+    assert empty_res.status_code == 400
+
+    upload_res = client.post(
+        "/api/profiles/upload-pdf",
+        headers=auth_headers,
+        data={"profile_name": "Junior\x00 Data Analyst"},
+        files={"file": ("cv\x00.txt", b"Nadia\x00 Vance\nJunior Data Analyst\nPython\x00 SQL", "text/plain")},
+    )
+    assert upload_res.status_code == 201, upload_res.text
+    assert "\x00" not in captured_raw_texts[0]
+
+    body = upload_res.json()
+    assert body["profile_name"] == "Junior Data Analyst"
+    assert body["full_name"] == "Nadia Vance"
+    assert body["skills"] == ["Python", "SQL"]
+    assert "\x00" not in body["raw_markdown"]
+
+    with isolated_env() as verify_db:
+        profiles = verify_db.execute(select(Profile)).scalars().all()
+        usages = verify_db.execute(select(TokenUsage)).scalars().all()
+        assert len(profiles) == 1
+        assert len(usages) == 1
+        assert usages[0].operation_type == "profile_parse"
+        assert usages[0].input_tokens == 851
+        assert usages[0].output_tokens == 360
+
+
+def test_unhandled_exception_preserves_cors_and_rolls_back_token_usage(
+    isolated_env,
+    auth_headers: Dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_parse(raw_text: str, api_key: str, model_name: str):
+        return (
+            {
+                "full_name": "Junior Candidate",
+                "email": "junior@example.com",
+                "summary": "Data Analyst",
+                "skills": ["SQL", "Python"],
+            },
+            500,
+            200,
+        )
+
+    monkeypatch.setattr(profiles_api, "parse_profile_from_text", _fake_parse)
+
+    fail_next_commit = True
+
+    def _fail_once(session) -> None:
+        nonlocal fail_next_commit
+        if fail_next_commit:
+            fail_next_commit = False
+            raise RuntimeError("simulated DB commit failure")
+
+    event.listen(isolated_env, "before_commit", _fail_once)
+    try:
+        err_client = TestClient(app, raise_server_exceptions=False)
+        err_res = err_client.post(
+            "/api/profiles/upload-pdf",
+            headers={**auth_headers, "Origin": "http://localhost:8081"},
+            data={"profile_name": "Junior Data Analyst"},
+            files={"file": ("cv.txt", b"Junior Candidate\nData Analyst", "text/plain")},
+        )
+    finally:
+        event.remove(isolated_env, "before_commit", _fail_once)
+
+    assert err_res.status_code == 500
+    assert err_res.headers.get("access-control-allow-origin") == "*"
+    assert "simulated DB commit failure" in err_res.json()["detail"]
+
+    with isolated_env() as verify_db:
+        assert verify_db.execute(select(Profile)).scalars().all() == []
+        assert verify_db.execute(select(TokenUsage)).scalars().all() == []
+
+
+def test_validate_gemini_key_live_verification_and_placeholder_rejection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from google import genai
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    # Placeholder keys are rejected outside test environment without contacting Google
+    placeholder_res = client.post(
+        "/api/auth/validate-gemini-key",
+        json={"api_key": "test-valid-gemini-key-98765"},
+    )
+    assert placeholder_res.status_code == 200
+    assert placeholder_res.json()["valid"] is False
+    assert "placeholder" in (placeholder_res.json()["detail"] or "").lower()
+
+    # Invalid Google AI Studio keys fail live models.list() check by default
+    class _FailingModels:
+        def list(self, **_kwargs):
+            raise RuntimeError("400 INVALID_ARGUMENT: API_KEY_INVALID")
+
+    class _FailingClient:
+        def __init__(self, api_key: str):
+            self.api_key = api_key
+            self.models = _FailingModels()
+
+    monkeypatch.setattr(genai, "Client", _FailingClient)
+    bad_live_res = client.post(
+        "/api/auth/validate-gemini-key",
+        json={"api_key": "AIzaSyInvalidKeyForTesting123456"},
+    )
+    assert bad_live_res.status_code == 200
+    assert bad_live_res.json()["valid"] is False
+    assert "API_KEY_INVALID" in (bad_live_res.json()["detail"] or "")
+
+    # Working live key passes verification cleanly
+    class _OkModels:
+        def list(self, **_kwargs):
+            return iter([{"name": "models/gemini-2.5-flash"}])
+
+    class _OkClient:
+        def __init__(self, api_key: str):
+            self.api_key = api_key
+            self.models = _OkModels()
+
+    monkeypatch.setattr(genai, "Client", _OkClient)
+    ok_res = client.post(
+        "/api/auth/validate-gemini-key",
+        json={"api_key": "AIzaSyValidKeyForTesting1234567"},
+    )
+    assert ok_res.status_code == 200
+    assert ok_res.json()["valid"] is True
+    assert ok_res.json()["detail"] is None
+
+
+def test_gemini_auth_error_returns_401_with_cors_and_zero_tokens(
+    isolated_env,
+    auth_headers: Dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.agents import adk_agents
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    async def _fail_auth(*_args, **_kwargs):
+        raise RuntimeError(
+            "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid.', "
+            "'details': [{'reason': 'API_KEY_INVALID'}]}}"
+        )
+
+    monkeypatch.setattr(adk_agents, "_execute_adk_agent_async", _fail_auth)
+
+    err_client = TestClient(app, raise_server_exceptions=False)
+    res = err_client.post(
+        "/api/profiles/upload-pdf",
+        headers={
+            **auth_headers,
+            "X-Gemini-Api-Key": "AIzaSyRevokedKey123456789012345",
+            "Origin": "http://localhost:8081",
+        },
+        data={"profile_name": "Junior Data Analyst"},
+        files={"file": ("cv.txt", b"Junior Candidate\nData Analyst", "text/plain")},
+    )
+
+    assert res.status_code == 401
+    assert res.headers.get("access-control-allow-origin") == "*"
+    assert "rejected your api key" in res.json()["detail"].lower()
+
+    with isolated_env() as verify_db:
+        assert verify_db.execute(select(Profile)).scalars().all() == []
+        assert verify_db.execute(select(TokenUsage)).scalars().all() == []

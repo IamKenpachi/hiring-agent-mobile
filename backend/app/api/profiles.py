@@ -96,6 +96,20 @@ def _serialize_profile(prof: Profile) -> Dict[str, Any]:
     }
 
 
+def _strip_nul_bytes(value: Any) -> Any:
+    """Recursively remove NUL (0x00) bytes rejected by PostgreSQL text columns."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul_bytes(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            _strip_nul_bytes(k) if isinstance(k, str) else k: _strip_nul_bytes(v)
+            for k, v in value.items()
+        }
+    return value
+
+
 def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
     """Extract readable text from an uploaded PDF, Markdown, or plain-text resume."""
     if not content:
@@ -107,7 +121,7 @@ def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
         try:
             reader = PdfReader(io.BytesIO(content))
             pages = [page.extract_text() or "" for page in reader.pages]
-            extracted = "\n".join(pages).strip()
+            extracted = _strip_nul_bytes("\n".join(pages)).strip()
             if extracted:
                 return extracted
         except Exception as exc:
@@ -119,9 +133,10 @@ def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
                 ) from exc
 
     try:
-        decoded = content.decode("utf-8").strip()
+        decoded = content.decode("utf-8")
     except UnicodeDecodeError:
-        decoded = content.decode("latin-1", errors="ignore").strip()
+        decoded = content.decode("latin-1", errors="ignore")
+    decoded = _strip_nul_bytes(decoded).strip()
 
     if not decoded:
         raise HTTPException(
@@ -195,29 +210,48 @@ def create_profile(
     return _serialize_profile(prof)
 
 
+def _parse_uploaded_resume(
+    file: UploadFile,
+    profile_name: Optional[str],
+    gemini_api_key: str,
+    x_gemini_model: Optional[str],
+) -> tuple[str, int, str, str, Dict[str, Any], int, int]:
+    """Read an uploaded CV synchronously, extract text, parse via ADK, and strip NUL bytes."""
+    content = file.file.read()
+    filename = _strip_nul_bytes(file.filename or "resume.pdf")
+    raw_text = _extract_uploaded_resume_text(filename, content)
+    active_model = resolve_gemini_model(x_gemini_model)
+
+    parsed, in_tok, out_tok = parse_profile_from_text(
+        raw_text=raw_text,
+        api_key=gemini_api_key,
+        model_name=active_model,
+    )
+    sanitized = _strip_nul_bytes(parsed)
+    clean_name = _strip_nul_bytes(profile_name or "").strip()
+    full_name = str(sanitized.get("full_name") or "").strip()
+    resolved_name = clean_name or f"{full_name or 'Imported'} CV"
+    return filename, len(content), active_model, resolved_name, sanitized, in_tok, out_tok
+
+
 @router.post("/parse-preview")
-async def parse_profile_preview(
+def parse_profile_preview(
     file: UploadFile = File(...),
     profile_name: Optional[str] = Form(None),
     gemini_api_key: str = Depends(get_gemini_api_key),
     x_gemini_model: Optional[str] = Header(None, alias="X-Gemini-Model"),
 ) -> Dict[str, Any]:
     """Parse a PDF/Markdown/Text CV using X-Gemini-Api-Key without requiring an account or DB write."""
-    content = await file.read()
-    filename = file.filename or "resume.pdf"
-    raw_text = _extract_uploaded_resume_text(filename, content)
-    active_model = resolve_gemini_model(x_gemini_model)
-
-    parsed, _, _ = parse_profile_from_text(
-        raw_text=raw_text,
-        api_key=gemini_api_key,
-        model_name=active_model,
+    filename, size_bytes, _, resolved_name, parsed, _, _ = _parse_uploaded_resume(
+        file=file,
+        profile_name=profile_name,
+        gemini_api_key=gemini_api_key,
+        x_gemini_model=x_gemini_model,
     )
-    resolved_name = (profile_name or "").strip() or f"{parsed.get('full_name') or 'Imported'} CV"
 
     return {
         "filename": filename,
-        "file_size_bytes": len(content),
+        "file_size_bytes": size_bytes,
         "profile_name": resolved_name,
         "full_name": str(parsed.get("full_name") or "").strip(),
         "email": str(parsed.get("email") or "").strip(),
@@ -236,7 +270,7 @@ async def parse_profile_preview(
 
 
 @router.post("/upload-pdf", status_code=status.HTTP_201_CREATED)
-async def upload_profile_pdf(
+def upload_profile_pdf(
     file: UploadFile = File(...),
     profile_name: Optional[str] = Form(None),
     current_user: CurrentUser = Depends(get_current_user),
@@ -245,20 +279,15 @@ async def upload_profile_pdf(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Upload a PDF/Markdown/Text CV, extract structured data via ADK ProfileParserAgent, and save."""
-    content = await file.read()
-    raw_text = _extract_uploaded_resume_text(file.filename or "resume.pdf", content)
-    active_model = resolve_gemini_model(x_gemini_model)
-
-    parsed, in_tok, out_tok = parse_profile_from_text(
-        raw_text=raw_text,
-        api_key=gemini_api_key,
-        model_name=active_model,
+    _, _, active_model, resolved_name, parsed, in_tok, out_tok = _parse_uploaded_resume(
+        file=file,
+        profile_name=profile_name,
+        gemini_api_key=gemini_api_key,
+        x_gemini_model=x_gemini_model,
     )
-    record_token_usage(db, current_user.id, active_model, "profile_parse", in_tok, out_tok)
 
     existing = db.execute(select(Profile).where(Profile.user_id == current_user.id)).scalars().all()
     is_default = len(existing) == 0
-    resolved_name = (profile_name or "").strip() or f"{parsed.get('full_name') or 'Imported'} CV"
 
     prof = Profile(
         id=str(uuid.uuid4()),
@@ -280,8 +309,23 @@ async def upload_profile_pdf(
         certifications_json=json.dumps(parsed.get("certifications") or []),
         raw_markdown=str(parsed.get("raw_markdown") or build_profile_markdown(parsed)),
     )
-    db.add(prof)
-    db.commit()
+    try:
+        db.add(prof)
+        db.flush()
+        if in_tok + out_tok > 0:
+            record_token_usage(
+                db,
+                current_user.id,
+                active_model,
+                "profile_parse",
+                in_tok,
+                out_tok,
+                commit=False,
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(prof)
     return _serialize_profile(prof)
 

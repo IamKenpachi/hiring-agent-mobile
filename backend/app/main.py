@@ -7,7 +7,10 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.agents import GeminiAuthError
 from app.api import (
     auth_router,
     hunt_router,
@@ -48,6 +51,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+class CatchAllExceptionMiddleware:
+    """Catch unhandled HTTP exceptions inside CORSMiddleware so browsers still receive CORS headers."""
+
+    def __init__(self, asgi_app: ASGIApp) -> None:
+        self.app = asgi_app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def _send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception as exc:
+            logger.exception("Unhandled error on %s %s", scope.get("method"), scope.get("path"))
+            if response_started:
+                raise
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": f"Internal server error: {exc}"},
+            )
+            await response(scope, receive, send)
+
+
+# Registered before CORSMiddleware so CORSMiddleware sits outermost and decorates all error responses.
+app.add_middleware(CatchAllExceptionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,6 +93,12 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
+
+
+@app.exception_handler(GeminiAuthError)
+async def gemini_auth_error_handler(_request, exc: GeminiAuthError) -> JSONResponse:
+    """Return 401 when Google Gemini rejects the user's API key."""
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
 
 app.include_router(auth_router)
 app.include_router(profiles_router)

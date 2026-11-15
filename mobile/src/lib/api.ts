@@ -291,19 +291,28 @@ export const apiClient = {
 
   async validateGeminiKey(
     apiKey?: string,
-    model?: string
-  ): Promise<{ valid: boolean; models: ModelOption[]; active_model: string }> {
-    return request<{ valid: boolean; models: ModelOption[]; active_model: string }>(
-      "/api/auth/validate-gemini-key",
-      {
-        method: "POST",
-        body: {
-          ...(apiKey !== undefined ? { api_key: apiKey } : {}),
-          ...(model ? { model } : {}),
-        },
-        overrides: { geminiKey: apiKey, model },
-      }
-    );
+    model?: string,
+    verifyLive = true
+  ): Promise<{
+    valid: boolean;
+    detail?: string | null;
+    models: ModelOption[];
+    active_model: string;
+  }> {
+    return request<{
+      valid: boolean;
+      detail?: string | null;
+      models: ModelOption[];
+      active_model: string;
+    }>("/api/auth/validate-gemini-key", {
+      method: "POST",
+      body: {
+        ...(apiKey !== undefined ? { api_key: apiKey } : {}),
+        ...(model ? { model } : {}),
+        verify_live: verifyLive,
+      },
+      overrides: { geminiKey: apiKey, model },
+    });
   },
 
   // --- Profiles ---

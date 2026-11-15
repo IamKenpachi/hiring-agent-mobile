@@ -125,18 +125,18 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     const trimmed = apiKeyInput.trim();
-    if (trimmed.length < 8 || /\s/.test(trimmed)) {
+    if (trimmed.length < 25 || /\s/.test(trimmed)) {
       setKeyVerified(false);
       return;
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await apiClient.validateGeminiKey(trimmed, modelInput);
+        const res = await apiClient.validateGeminiKey(trimmed, modelInput, true);
         setKeyVerified(Boolean(res.valid));
       } catch {
-        setKeyVerified(trimmed.length >= 12);
+        setKeyVerified(false);
       }
-    }, 350);
+    }, 500);
     return () => clearTimeout(timer);
   }, [apiKeyInput, modelInput]);
 
@@ -161,10 +161,13 @@ export default function OnboardingScreen() {
     setValidating(true);
     setError(null);
     try {
-      const result = await apiClient.validateGeminiKey(trimmed, modelInput);
+      const result = await apiClient.validateGeminiKey(trimmed, modelInput, true);
       if (!result.valid) {
         setKeyVerified(false);
-        setError("Gemini API Key format looks invalid. Please check your key.");
+        setError(
+          result.detail ||
+            "Google Gemini rejected this API key. Check that your key starts with AIza and is active."
+        );
         return;
       }
       setKeyVerified(true);

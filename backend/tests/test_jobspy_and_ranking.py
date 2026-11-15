@@ -247,3 +247,70 @@ def test_hunt_background_task_execution(
     assert run_res.status_code == 200
     assert run_res.json()["run"]["status"] == "completed"
     assert len(run_res.json()["jobs"]) == 1
+
+
+def test_live_non_auth_fallback_bills_zero_tokens_and_warns_and_auth_error_raises(
+    client: TestClient,
+    auth_headers: Dict[str, str],
+    sample_wizard_payload: Dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.agents import GeminiAuthError, adk_agents
+
+    assert client.post("/api/profiles", headers=auth_headers, json=sample_wizard_payload).status_code == 201
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    async def _fail_transient(*_args, **_kwargs):
+        raise RuntimeError("503 Service Unavailable")
+
+    monkeypatch.setattr(adk_agents, "_execute_adk_agent_async", _fail_transient)
+    monkeypatch.setattr(
+        jobspy_service,
+        "scrape_jobs",
+        lambda **_kwargs: pd.DataFrame(
+            [
+                {
+                    "title": "Data Analyst",
+                    "company": "Monzo",
+                    "location": "London, UK",
+                    "salary": "£60,000",
+                    "site": "indeed",
+                    "job_url": "https://indeed.com/view/555",
+                    "description": "Python, SQL, Tableau, Pandas.",
+                }
+            ]
+        ),
+    )
+
+    live_headers = {**auth_headers, "X-Gemini-Api-Key": "AIzaSyLiveKeyWithTransient503Err"}
+    start_res = client.post(
+        "/api/hunt/start",
+        headers=live_headers,
+        json={
+            "query": "Data Analyst",
+            "location": "London, UK",
+            "platforms": ["indeed"],
+            "requested_top_n": 3,
+            "run_sync": True,
+        },
+    )
+    assert start_res.status_code == 200
+    run_id = start_res.json()["run_id"]
+
+    run_res = client.get(f"/api/hunt/runs/{run_id}", headers=live_headers).json()
+    assert any("0 api tokens were billed" in w.lower() for w in run_res["run"]["warnings"])
+
+    tel = client.get("/api/telemetry/tokens", headers=live_headers).json()
+    assert tel["calls"] == 0
+    assert tel["total_tokens"] == 0
+
+    async def _fail_auth(*_args, **_kwargs):
+        raise RuntimeError("400 INVALID_ARGUMENT: API_KEY_INVALID")
+
+    monkeypatch.setattr(adk_agents, "_execute_adk_agent_async", _fail_auth)
+    with pytest.raises(GeminiAuthError):
+        rank_jobs_batch(
+            [{"title": "Data Analyst", "description": "SQL Python"}],
+            "Candidate SQL Python",
+            api_key="AIzaSyBadKeyForRankingTest12345",
+        )

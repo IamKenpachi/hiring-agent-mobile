@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents import is_placeholder_gemini_key
 from app.core.config import AVAILABLE_MODELS, SUPABASE_KEY, SUPABASE_URL, resolve_gemini_model
 from app.core.security import (
     CurrentUser,
@@ -40,7 +41,7 @@ class LoginRequest(BaseModel):
 class ValidateGeminiKeyRequest(BaseModel):
     api_key: Optional[str] = None
     model: Optional[str] = None
-    verify_live: bool = False
+    verify_live: bool = True
 
 
 def _normalize_email(raw_email: str) -> str:
@@ -231,22 +232,44 @@ def validate_gemini_key(
     if not candidate_key or len(candidate_key) < 8 or any(ch.isspace() for ch in candidate_key):
         return {
             "valid": False,
+            "detail": "Gemini API key must be at least 8 characters with no spaces.",
+            "models": AVAILABLE_MODELS,
+            "active_model": active_model,
+        }
+
+    is_test_env = os.getenv("ENVIRONMENT", "development").lower() == "test"
+    is_placeholder = is_placeholder_gemini_key(candidate_key)
+    if not is_test_env and is_placeholder:
+        return {
+            "valid": False,
+            "detail": "Placeholder or test keys cannot be used. Enter a valid Google AI Studio key starting with AIza...",
             "models": AVAILABLE_MODELS,
             "active_model": active_model,
         }
 
     is_valid = True
-    if req and req.verify_live and not candidate_key.lower().startswith(("test-", "dummy", "mock")):
+    detail: Optional[str] = None
+    should_verify_live = True if req is None else bool(req.verify_live)
+    if should_verify_live and not (is_test_env and is_placeholder):
         try:
             from google import genai
 
             client = genai.Client(api_key=candidate_key)
             next(iter(client.models.list(config={"page_size": 1})), None)
-        except Exception:
+        except Exception as exc:
             is_valid = False
+            exc_msg = str(exc)
+            if "API_KEY_INVALID" in exc_msg.upper() or "api key not valid" in exc_msg.lower():
+                detail = (
+                    "Google Gemini rejected this API key (API_KEY_INVALID). "
+                    "Verify or regenerate your key in Google AI Studio."
+                )
+            else:
+                detail = f"Unable to verify Gemini API key: {exc_msg[:180]}"
 
     return {
         "valid": is_valid,
+        "detail": detail,
         "models": AVAILABLE_MODELS,
         "active_model": active_model,
     }

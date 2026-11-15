@@ -51,7 +51,8 @@ def extract_jd(
         api_key=gemini_api_key,
         model_name=active_model,
     )
-    record_token_usage(db, current_user.id, active_model, "jd_extract", in_tok, out_tok)
+    if in_tok + out_tok > 0:
+        record_token_usage(db, current_user.id, active_model, "jd_extract", in_tok, out_tok)
     return extracted
 
 
@@ -112,7 +113,8 @@ def tailor_from_studio(
             api_key=gemini_api_key,
             model_name=active_model,
         )
-        record_token_usage(db, current_user.id, active_model, "jd_extract", in_tok, out_tok)
+        if in_tok + out_tok > 0:
+            record_token_usage(db, current_user.id, active_model, "jd_extract", in_tok, out_tok)
         job_title = job_title or str(extracted.get("job_title") or "Target Role")
         company = company or str(extracted.get("company") or "Target Company")
 

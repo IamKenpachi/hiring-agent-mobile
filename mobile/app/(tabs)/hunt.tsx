@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,27 +8,44 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Brain,
   Briefcase,
+  Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Clock,
   DollarSign,
+  Filter,
   Globe,
+  Home,
   MapPin,
   Minus,
   Plus,
   Radar,
   SlidersHorizontal,
+  Trophy,
   UserCheck,
 } from "lucide-react-native";
-import { COLORS } from "../../src/constants/theme";
+import { COLORS, getScoreTheme } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
-import { ScoreBadge } from "../../src/components/ScoreBadge";
+import {
+  AuthButtonGradient,
+  OnboardingAmbientGlow,
+  WEB_SANS,
+} from "../../src/components/OnboardingGraphics";
 import type { RankedJob, SearchRun } from "../../src/types";
+
+type HuntStage = "config" | "progress" | "results";
+type StepVisualState = "pending" | "running" | "done" | "failed";
 
 const PRIMARY_BOARDS = [
   { id: "linkedin", label: "LinkedIn" },
@@ -65,10 +82,107 @@ const RECENCY_OPTIONS = [
 const RADIUS_OPTIONS = [10, 25, 50, 100];
 const TOP_N_PRESETS = [5, 10, 15, 20, 30];
 
+function statusToPhaseIndex(status?: SearchRun["status"]): number {
+  switch (status) {
+    case "completed":
+      return 5;
+    case "finalizing":
+      return 4;
+    case "ranking":
+      return 3;
+    case "deduplicating":
+      return 2;
+    case "scraping":
+      return 1;
+    case "pending":
+    default:
+      return 0;
+  }
+}
+
+function cleanMarkdownSnippet(raw?: string | null): string {
+  if (!raw || !raw.trim()) return "No description provided.";
+  return raw
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/(^|\n)\s*#{1,6}\s*/g, "$1")
+    .replace(/(^|\n)\s*[-*+•]\s+/g, "$1")
+    .replace(/[*_`~>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatBoardListSummary(
+  selectedIds: string[],
+  allBoards: { id: string; label: string }[]
+): string {
+  const labels = selectedIds.map(
+    (id) => allBoards.find((b) => b.id === id)?.label || id.replace(/_/g, " ")
+  );
+  if (labels.length === 0) return "selected boards";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} & ${labels[1]}`;
+  if (labels.length === 3) return `${labels[0]}, ${labels[1]} & ${labels[2]}`;
+  return `${labels[0]}, ${labels[1]} & ${labels.length - 2} more`;
+}
+
+function ProgressGradientFill({ failed }: { failed: boolean }) {
+  const rawId = useId();
+  const gradId = `huntProg-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 300 8" preserveAspectRatio="none">
+      <Defs>
+        <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <Stop offset="0%" stopColor={failed ? "#FB7185" : "#06B6D4"} />
+          <Stop offset="55%" stopColor={failed ? "#F43F5E" : "#14B8A6"} />
+          <Stop offset="100%" stopColor={failed ? "#E11D48" : "#10B981"} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="300" height="8" rx="4" fill={`url(#${gradId})`} />
+    </Svg>
+  );
+}
+
+interface ExecutionStepItem {
+  id: number;
+  kicker: string;
+  title: string;
+  subtitle: string;
+  state: StepVisualState;
+  icon: "globe" | "filter" | "brain" | "trophy";
+}
+
+function StepIcon({
+  icon,
+  state,
+}: {
+  icon: ExecutionStepItem["icon"];
+  state: StepVisualState;
+}) {
+  const color =
+    state === "done"
+      ? "#34D399"
+      : state === "running"
+        ? "#22D3EE"
+        : state === "failed"
+          ? "#FB7185"
+          : "#64748B";
+  switch (icon) {
+    case "globe":
+      return <Globe size={21} color={color} />;
+    case "filter":
+      return <Filter size={21} color={color} />;
+    case "brain":
+      return <Brain size={21} color={color} />;
+    case "trophy":
+      return <Trophy size={21} color={color} />;
+  }
+}
+
 export default function HuntScreen() {
   const router = useRouter();
   const { activeProfile, selectedModel, refreshTelemetry } = useAuth();
 
+  const [stage, setStage] = useState<HuntStage>("config");
   const [query, setQuery] = useState("Data Analyst");
   const [location, setLocation] = useState("London, UK");
   const [radius, setRadius] = useState(25);
@@ -91,6 +205,7 @@ export default function HuntScreen() {
   const [regionalBoards, setRegionalBoards] = useState(REGIONAL_BOARDS);
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const highestPhaseRef = useRef<number>(0);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +269,7 @@ export default function HuntScreen() {
     }
 
     unsubscribeRef.current?.();
+    highestPhaseRef.current = 0;
     setError(null);
     setHunting(true);
     setRankedJobs([]);
@@ -164,6 +280,7 @@ export default function HuntScreen() {
       warnings: [],
       total_scraped: 0,
     });
+    setStage("progress");
 
     try {
       const started = await apiClient.startHunt({
@@ -180,9 +297,14 @@ export default function HuntScreen() {
 
       unsubscribeRef.current = apiClient.subscribeHuntRun(started.run_id, {
         onProgress: (runUpdate) => {
+          const nextPhase = statusToPhaseIndex(runUpdate.status);
+          if (nextPhase > highestPhaseRef.current) {
+            highestPhaseRef.current = nextPhase;
+          }
           setActiveRun((prev) => ({ ...(prev || {}), ...runUpdate }));
         },
         onComplete: (result) => {
+          highestPhaseRef.current = 5;
           setActiveRun(result.run);
           const sorted = [...(result.jobs || [])].sort(
             (a, b) => (b.overall_fit_score || 0) - (a.overall_fit_score || 0)
@@ -193,6 +315,11 @@ export default function HuntScreen() {
         },
         onError: (err) => {
           setError(err.message);
+          setActiveRun((prev) => ({
+            ...(prev || {}),
+            status: "failed",
+            status_detail: err.message,
+          }));
           setHunting(false);
         },
       });
@@ -204,423 +331,948 @@ export default function HuntScreen() {
             ? err.message
             : "Failed to start JobSpy hunt.";
       setError(msg);
+      setActiveRun((prev) => ({
+        ...(prev || {}),
+        status: "failed",
+        status_detail: msg,
+      }));
       setHunting(false);
     }
   };
 
+  const activeProfileName =
+    activeProfile?.profile_name || activeProfile?.full_name || "Default CV";
+  const allBoards = [...primaryBoards, ...regionalBoards];
+  const boardSummary = formatBoardListSummary(selectedPlatforms, allBoards);
+  const totalScraped = activeRun?.total_scraped || 0;
   const progressPct = Math.max(0, Math.min(100, Math.round(activeRun?.progress_pct || 0)));
+  const isCompleted = activeRun?.status === "completed";
+  const isFailed = activeRun?.status === "failed";
+
+  // Map live SSE backend run state into 4 sequential UI step states
+  const currentPhase = isFailed
+    ? Math.max(1, highestPhaseRef.current)
+    : statusToPhaseIndex(activeRun?.status);
+
+  const resolveStepState = (stepNumber: number): StepVisualState => {
+    if (isCompleted) return "done";
+    if (isFailed) {
+      if (stepNumber < currentPhase) return "done";
+      if (stepNumber === currentPhase) return "failed";
+      return "pending";
+    }
+    if (stepNumber === 1) {
+      return currentPhase >= 2 ? "done" : "running";
+    }
+    if (currentPhase > stepNumber) return "done";
+    if (currentPhase === stepNumber) return "running";
+    return "pending";
+  };
+
+  const executionSteps: ExecutionStepItem[] = [
+    {
+      id: 1,
+      icon: "globe",
+      state: resolveStepState(1),
+      kicker:
+        resolveStepState(1) === "done"
+          ? "Stage 1 • Scraped"
+          : resolveStepState(1) === "failed"
+            ? "Stage 1 • Stopped"
+            : "Stage 1 • Harvesting",
+      title: "Multi-Board JobSpy Scraping",
+      subtitle:
+        resolveStepState(1) === "done"
+          ? `Harvested ${totalScraped > 0 ? totalScraped : requestedTopN} listings across ${boardSummary}`
+          : resolveStepState(1) === "running"
+            ? activeRun?.status_detail || `Scraping ${boardSummary}...`
+            : "Waiting to harvest job boards",
+    },
+    {
+      id: 2,
+      icon: "filter",
+      state: resolveStepState(2),
+      kicker:
+        resolveStepState(2) === "done"
+          ? "Stage 2 • Verified"
+          : resolveStepState(2) === "running"
+            ? "Stage 2 • Cleaning"
+            : resolveStepState(2) === "failed"
+              ? "Stage 2 • Stopped"
+              : "Stage 2 • Queued",
+      title: "Deduplication & Normalization",
+      subtitle:
+        resolveStepState(2) === "done"
+          ? `Cleaned and verified ${totalScraped > 0 ? `${totalScraped} unique` : "scraped"} job descriptions`
+          : resolveStepState(2) === "running"
+            ? activeRun?.status_detail || "Deduplicating & normalizing postings..."
+            : "Deduplicates cross-board listings & metadata",
+    },
+    {
+      id: 3,
+      icon: "brain",
+      state: resolveStepState(3),
+      kicker:
+        resolveStepState(3) === "done"
+          ? "Stage 3 • Scored"
+          : resolveStepState(3) === "running"
+            ? "Stage 3 • Evaluating"
+            : resolveStepState(3) === "failed"
+              ? "Stage 3 • Stopped"
+              : "Stage 3 • Queued",
+      title: "AI Match & ATS Scoring",
+      subtitle:
+        resolveStepState(3) === "done"
+          ? "Evaluated Overall Fit, Skills, Experience & ATS (batches of 10)"
+          : resolveStepState(3) === "running"
+            ? activeRun?.status_detail || `Scoring roles with ${selectedModel}...`
+            : `Evaluates Overall Fit, Skills, Experience & ATS`,
+    },
+    {
+      id: 4,
+      icon: "trophy",
+      state: resolveStepState(4),
+      kicker:
+        resolveStepState(4) === "done"
+          ? "Stage 4 • Ranked"
+          : resolveStepState(4) === "running"
+            ? "Stage 4 • Selecting"
+            : resolveStepState(4) === "failed"
+              ? "Stage 4 • Stopped"
+              : "Stage 4 • Queued",
+      title: `Ranking Top ${requestedTopN} Matches`,
+      subtitle:
+        resolveStepState(4) === "done"
+          ? `Sorted top ${rankedJobs.length > 0 ? rankedJobs.length : requestedTopN} highest-fit roles for ${activeProfileName}`
+          : resolveStepState(4) === "running"
+            ? activeRun?.status_detail || `Persisting top ${requestedTopN} ranked matches...`
+            : `Selects top ${requestedTopN} roles tailored to ${activeProfileName}`,
+    },
+  ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scroll}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Active Context Banner */}
-      <View style={styles.contextBar}>
-        <View style={styles.contextItem}>
-          <UserCheck size={14} color={COLORS.emerald} />
-          <Text style={styles.contextText} numberOfLines={1}>
-            {activeProfile?.profile_name || activeProfile?.full_name || "Default CV"}
-          </Text>
-        </View>
-        <View style={styles.modelPill}>
-          <Text style={styles.modelPillText}>{selectedModel}</Text>
-        </View>
-      </View>
+    <SafeAreaView edges={["top"]} style={styles.screenRoot}>
+      <OnboardingAmbientGlow />
 
-      {/* Search Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Radar size={18} color={COLORS.indigo} />
-          <Text style={styles.cardTitle}>Multi-Board JobSpy Configuration</Text>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Job Title / Role Query *</Text>
-          <View style={styles.inputRow}>
-            <Briefcase size={15} color={COLORS.textMuted} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="e.g. Senior Data Analyst, Analytics Engineer"
-              placeholderTextColor={COLORS.textMuted}
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Location</Text>
-          <View style={styles.inputRow}>
-            <MapPin size={15} color={COLORS.textMuted} />
-            <TextInput
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. London, UK or Remote"
-              placeholderTextColor={COLORS.textMuted}
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Radius */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Search Radius</Text>
-          <View style={styles.chipRow}>
-            {RADIUS_OPTIONS.map((r) => (
-              <Pressable
-                key={r}
-                onPress={() => setRadius(r)}
-                style={[styles.chip, radius === r && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, radius === r && styles.chipTextActive]}>
-                  {r} mi
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Work Type */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Work Type</Text>
-          <View style={styles.chipRow}>
-            {WORK_TYPES.map((wt) => (
-              <Pressable
-                key={wt}
-                onPress={() => setWorkType(wt)}
-                style={[styles.chip, workType === wt && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, workType === wt && styles.chipTextActive]}>
-                  {wt}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Recency */}
-        <View style={styles.fieldGroup}>
-          <View style={styles.rowBetween}>
-            <View style={styles.labelIconRow}>
-              <Clock size={13} color={COLORS.amber} />
-              <Text style={styles.label}>Posting Recency</Text>
-            </View>
-          </View>
-          <View style={styles.chipRow}>
-            {RECENCY_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.label}
-                onPress={() => setHoursOld(opt.hours)}
-                style={[styles.chip, hoursOld === opt.hours && styles.chipActive]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    hoursOld === opt.hours && styles.chipTextActive,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Number of Ranked Results (N) */}
-        <View style={styles.fieldGroup}>
-          <View style={styles.rowBetween}>
-            <View style={styles.labelIconRow}>
-              <SlidersHorizontal size={13} color={COLORS.purple} />
-              <Text style={styles.label}>Top Ranked Results (N)</Text>
-            </View>
-            <View style={styles.stepper}>
-              <Pressable
-                onPress={() => setRequestedTopN((n) => Math.max(1, n - 1))}
-                style={styles.stepBtn}
-              >
-                <Minus size={13} color={COLORS.textPrimary} />
-              </Pressable>
-              <Text style={styles.stepVal}>{requestedTopN}</Text>
-              <Pressable
-                onPress={() => setRequestedTopN((n) => Math.min(50, n + 1))}
-                style={styles.stepBtn}
-              >
-                <Plus size={13} color={COLORS.textPrimary} />
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.chipRow}>
-            {TOP_N_PRESETS.map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => setRequestedTopN(n)}
-                style={[styles.chip, requestedTopN === n && styles.chipActive]}
-              >
-                <Text
-                  style={[styles.chipText, requestedTopN === n && styles.chipTextActive]}
-                >
-                  Top {n}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* 8-Platform JobSpy Selector */}
-        <View style={styles.fieldGroup}>
-          <View style={styles.rowBetween}>
-            <View style={styles.labelIconRow}>
-              <Globe size={13} color={COLORS.cyan} />
-              <Text style={styles.label}>
-                JobSpy Platforms ({selectedPlatforms.length}/8 selected)
-              </Text>
-            </View>
+      {/* ================================================================ */}
+      {/* SCREEN 1: HUNT CONFIGURATION                                      */}
+      {/* ================================================================ */}
+      {stage === "config" ? (
+        <View style={styles.stageContainer}>
+          <View style={styles.headerBar}>
+            <Text style={[styles.headerTitle, WEB_SANS]}>JobSpy Hunter</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Home"
+              onPress={() => router.replace("/home")}
+              style={({ pressed }) => [
+                styles.headerPillBtn,
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <Home size={14} color={COLORS.textPrimary} />
+              <Text style={[styles.headerPillText, WEB_SANS]}>Home</Text>
+            </Pressable>
           </View>
 
-          <View style={styles.chipRow}>
-            {primaryBoards.map((b) => {
-              const active = selectedPlatforms.includes(b.id);
-              return (
-                <Pressable
-                  key={b.id}
-                  onPress={() => togglePlatform(b.id)}
-                  style={[styles.boardChip, active && styles.boardChipActive]}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {b.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Pressable
-            onPress={() => setShowRegional((prev) => !prev)}
-            style={styles.regionalToggle}
+          <ScrollView
+            style={styles.flexScroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.regionalToggleText}>
-              Regional JobSpy Boards (Bayt, Naukri, BDJobs)
-            </Text>
-            {showRegional ? (
-              <ChevronUp size={15} color={COLORS.textSecondary} />
-            ) : (
-              <ChevronDown size={15} color={COLORS.textSecondary} />
-            )}
-          </Pressable>
+            {/* Active Context Banner */}
+            <View style={styles.contextBar}>
+              <View style={styles.contextItem}>
+                <View style={styles.profileDotWrap}>
+                  <UserCheck size={14} color={COLORS.emerald} />
+                </View>
+                <Text style={[styles.contextText, WEB_SANS]} numberOfLines={1}>
+                  {activeProfileName}
+                </Text>
+              </View>
+              <View style={styles.modelPill}>
+                <Text style={[styles.modelPillText, WEB_SANS]} numberOfLines={1}>
+                  {selectedModel}
+                </Text>
+              </View>
+            </View>
 
-          {showRegional ? (
-            <View style={styles.chipRow}>
-              {regionalBoards.map((b) => {
-                const active = selectedPlatforms.includes(b.id);
-                return (
-                  <Pressable
-                    key={b.id}
-                    onPress={() => togglePlatform(b.id)}
-                    style={[styles.boardChip, active && styles.boardChipPurple]}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {b.label}
+            {/* Configuration Card */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Radar size={18} color="#818CF8" />
+                <Text style={[styles.cardTitle, WEB_SANS]}>
+                  Multi-Board JobSpy Configuration
+                </Text>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, WEB_SANS]}>Job Title / Role Query *</Text>
+                <View style={styles.inputRow}>
+                  <Briefcase size={15} color={COLORS.textMuted} />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="e.g. Senior Data Analyst, Analytics Engineer"
+                    placeholderTextColor={COLORS.textMuted}
+                    style={[styles.input, WEB_SANS]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, WEB_SANS]}>Location</Text>
+                <View style={styles.inputRow}>
+                  <MapPin size={15} color={COLORS.textMuted} />
+                  <TextInput
+                    value={location}
+                    onChangeText={setLocation}
+                    placeholder="e.g. London, UK or Remote"
+                    placeholderTextColor={COLORS.textMuted}
+                    style={[styles.input, WEB_SANS]}
+                  />
+                </View>
+              </View>
+
+              {/* Radius */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, WEB_SANS]}>Search Radius</Text>
+                <View style={styles.chipRow}>
+                  {RADIUS_OPTIONS.map((r) => (
+                    <Pressable
+                      key={r}
+                      onPress={() => setRadius(r)}
+                      style={[styles.chip, radius === r && styles.chipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          WEB_SANS,
+                          radius === r && styles.chipTextActive,
+                        ]}
+                      >
+                        {r} mi
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Work Type */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, WEB_SANS]}>Work Type</Text>
+                <View style={styles.chipRow}>
+                  {WORK_TYPES.map((wt) => (
+                    <Pressable
+                      key={wt}
+                      onPress={() => setWorkType(wt)}
+                      style={[styles.chip, workType === wt && styles.chipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          WEB_SANS,
+                          workType === wt && styles.chipTextActive,
+                        ]}
+                      >
+                        {wt}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Recency */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.labelIconRow}>
+                    <Clock size={13} color={COLORS.amber} />
+                    <Text style={[styles.label, WEB_SANS]}>Posting Recency</Text>
+                  </View>
+                </View>
+                <View style={styles.chipRow}>
+                  {RECENCY_OPTIONS.map((opt) => (
+                    <Pressable
+                      key={opt.label}
+                      onPress={() => setHoursOld(opt.hours)}
+                      style={[styles.chip, hoursOld === opt.hours && styles.chipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          WEB_SANS,
+                          hoursOld === opt.hours && styles.chipTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Number of Ranked Results (N) */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.labelIconRow}>
+                    <SlidersHorizontal size={13} color={COLORS.purple} />
+                    <Text style={[styles.label, WEB_SANS]}>Top Ranked Results (N)</Text>
+                  </View>
+                  <View style={styles.stepper}>
+                    <Pressable
+                      onPress={() => setRequestedTopN((n) => Math.max(1, n - 1))}
+                      style={styles.stepBtn}
+                    >
+                      <Minus size={13} color={COLORS.textPrimary} />
+                    </Pressable>
+                    <Text style={[styles.stepVal, WEB_SANS]}>{requestedTopN}</Text>
+                    <Pressable
+                      onPress={() => setRequestedTopN((n) => Math.min(50, n + 1))}
+                      style={styles.stepBtn}
+                    >
+                      <Plus size={13} color={COLORS.textPrimary} />
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.chipRow}>
+                  {TOP_N_PRESETS.map((n) => (
+                    <Pressable
+                      key={n}
+                      onPress={() => setRequestedTopN(n)}
+                      style={[styles.chip, requestedTopN === n && styles.chipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          WEB_SANS,
+                          requestedTopN === n && styles.chipTextActive,
+                        ]}
+                      >
+                        Top {n}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* 8-Platform JobSpy Selector */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.labelIconRow}>
+                    <Globe size={13} color={COLORS.cyan} />
+                    <Text style={[styles.label, WEB_SANS]}>
+                      JobSpy Platforms ({selectedPlatforms.length}/8 selected)
                     </Text>
-                  </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.chipRow}>
+                  {primaryBoards.map((b) => {
+                    const active = selectedPlatforms.includes(b.id);
+                    return (
+                      <Pressable
+                        key={b.id}
+                        onPress={() => togglePlatform(b.id)}
+                        style={[styles.boardChip, active && styles.boardChipActive]}
+                      >
+                        {active ? <AuthButtonGradient /> : null}
+                        <Text
+                          style={[
+                            styles.chipText,
+                            WEB_SANS,
+                            styles.boardChipLabel,
+                            active && styles.chipTextActive,
+                          ]}
+                        >
+                          {b.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Pressable
+                  onPress={() => setShowRegional((prev) => !prev)}
+                  style={styles.regionalToggle}
+                >
+                  <Text style={[styles.regionalToggleText, WEB_SANS]}>
+                    Regional JobSpy Boards (Bayt, Naukri, BDJobs)
+                  </Text>
+                  {showRegional ? (
+                    <ChevronUp size={15} color={COLORS.textSecondary} />
+                  ) : (
+                    <ChevronDown size={15} color={COLORS.textSecondary} />
+                  )}
+                </Pressable>
+
+                {showRegional ? (
+                  <View style={styles.chipRow}>
+                    {regionalBoards.map((b) => {
+                      const active = selectedPlatforms.includes(b.id);
+                      return (
+                        <Pressable
+                          key={b.id}
+                          onPress={() => togglePlatform(b.id)}
+                          style={[styles.boardChip, active && styles.boardChipActive]}
+                        >
+                          {active ? <AuthButtonGradient /> : null}
+                          <Text
+                            style={[
+                              styles.chipText,
+                              WEB_SANS,
+                              styles.boardChipLabel,
+                              active && styles.chipTextActive,
+                            ]}
+                          >
+                            {b.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={[styles.errorText, WEB_SANS]}>{error}</Text>
+                </View>
+              ) : null}
+
+              {/* Vibrant Gradient Hunt CTA */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Hunt Top ${requestedTopN} Matches`}
+                onPress={handleStartHunt}
+                disabled={hunting}
+                style={({ pressed }) => [
+                  styles.gradientCta,
+                  hunting && { opacity: 0.7 },
+                  pressed && { opacity: 0.9 },
+                ]}
+              >
+                <AuthButtonGradient />
+                <View style={styles.gradientCtaInner}>
+                  {hunting ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Radar size={18} color="#FFFFFF" />
+                  )}
+                  <Text style={[styles.gradientCtaText, WEB_SANS]}>
+                    {hunting ? "Starting JobSpy Hunt..." : `Hunt Top ${requestedTopN} Matches`}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* ================================================================ */}
+      {/* SCREEN 2: LIVE EXECUTION STEPS                                   */}
+      {/* ================================================================ */}
+      {stage === "progress" ? (
+        <View style={styles.stageContainer}>
+          <View style={styles.headerBar}>
+            <View style={styles.headerLeftGroup}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to hunt configuration"
+                onPress={() => setStage("config")}
+                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+              >
+                <ArrowLeft size={20} color={COLORS.textPrimary} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.headerTitle, WEB_SANS]}>Job Hunt Progress</Text>
+                <Text style={[styles.headerSubtitle, WEB_SANS]} numberOfLines={1}>
+                  {query.trim() || "Job Hunt"} • {location.trim() || "Remote"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <ScrollView
+            style={styles.flexScroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Top Progress Summary Card */}
+            <View style={[styles.summaryCard, isFailed && styles.summaryCardFailed]}>
+              <View style={styles.summaryTopRow}>
+                <Text style={[styles.summaryHeadline, WEB_SANS]}>
+                  {isFailed ? `Hunt Failed` : `${progressPct}% Complete`}
+                  {totalScraped > 0 ? (
+                    <Text style={styles.summarySubCount}>
+                      {` • ${totalScraped} jobs harvested`}
+                    </Text>
+                  ) : null}
+                </Text>
+                {!isCompleted && !isFailed ? (
+                  <ActivityIndicator size="small" color="#22D3EE" />
+                ) : null}
+              </View>
+
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressBarWrap, { width: `${progressPct}%` }]}>
+                  <ProgressGradientFill failed={isFailed} />
+                </View>
+              </View>
+            </View>
+
+            {/* 4 Vertical Step Cards */}
+            <View style={styles.stepsStack}>
+              {executionSteps.map((step) => {
+                const isDone = step.state === "done";
+                const isRunning = step.state === "running";
+                const isStepFailed = step.state === "failed";
+
+                return (
+                  <View
+                    key={step.id}
+                    style={[
+                      styles.stepCard,
+                      isDone && styles.stepCardDone,
+                      isRunning && styles.stepCardRunning,
+                      isStepFailed && styles.stepCardFailed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.stepIconRing,
+                        isDone && styles.stepIconRingDone,
+                        isRunning && styles.stepIconRingRunning,
+                        isStepFailed && styles.stepIconRingFailed,
+                      ]}
+                    >
+                      <StepIcon icon={step.icon} state={step.state} />
+                    </View>
+
+                    <View style={styles.stepBody}>
+                      <View style={styles.stepTopRow}>
+                        <Text
+                          style={[
+                            styles.stepKicker,
+                            WEB_SANS,
+                            isDone && styles.stepKickerDone,
+                            isRunning && styles.stepKickerRunning,
+                            isStepFailed && styles.stepKickerFailed,
+                          ]}
+                        >
+                          {step.kicker}
+                        </Text>
+
+                        <View
+                          style={[
+                            styles.stepStatusPill,
+                            isDone && styles.stepStatusPillDone,
+                            isRunning && styles.stepStatusPillRunning,
+                            isStepFailed && styles.stepStatusPillFailed,
+                          ]}
+                        >
+                          {isDone ? (
+                            <>
+                              <Check size={11} color="#34D399" />
+                              <Text style={[styles.stepStatusTextDone, WEB_SANS]}>Done</Text>
+                            </>
+                          ) : isRunning ? (
+                            <>
+                              <ActivityIndicator size={10} color="#22D3EE" />
+                              <Text style={[styles.stepStatusTextRunning, WEB_SANS]}>
+                                Running
+                              </Text>
+                            </>
+                          ) : isStepFailed ? (
+                            <Text style={[styles.stepStatusTextFailed, WEB_SANS]}>
+                              Failed
+                            </Text>
+                          ) : (
+                            <Text style={[styles.stepStatusTextPending, WEB_SANS]}>
+                              Queued
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      <Text style={[styles.stepTitle, WEB_SANS]}>{step.title}</Text>
+                      <Text style={[styles.stepSubtitle, WEB_SANS]} numberOfLines={2}>
+                        {step.subtitle}
+                      </Text>
+                    </View>
+                  </View>
                 );
               })}
             </View>
-          ) : null}
-        </View>
 
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-
-        <Pressable
-          onPress={handleStartHunt}
-          disabled={hunting}
-          style={[styles.huntBtn, hunting && { opacity: 0.65 }]}
-        >
-          {hunting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Radar size={18} color="#FFFFFF" />
-          )}
-          <Text style={styles.huntBtnText}>
-            {hunting ? "Scanning & Ranking Jobs..." : `Hunt Top ${requestedTopN} Matches`}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Live Progress Card */}
-      {activeRun ? (
-        <View style={styles.progressCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.progressPhase}>
-              {activeRun.status === "scraping"
-                ? "Scraping JobSpy Boards"
-                : activeRun.status === "ranking"
-                  ? "ADK Multi-Agent Ranking"
-                  : activeRun.status === "completed"
-                    ? "Hunt Complete"
-                    : activeRun.status === "failed"
-                      ? "Hunt Failed"
-                      : "Initializing"}
-            </Text>
-            <Text style={styles.progressPct}>{progressPct}%</Text>
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${progressPct}%`,
-                  backgroundColor:
-                    activeRun.status === "completed"
-                      ? COLORS.emerald
-                      : activeRun.status === "failed"
-                        ? COLORS.rose
-                        : COLORS.indigo,
-                },
-              ]}
-            />
-          </View>
-
-          <Text style={styles.progressDetail}>
-            {activeRun.status_detail || "Working..."}
-            {typeof activeRun.total_scraped === "number" && activeRun.total_scraped > 0
-              ? ` • ${activeRun.total_scraped} postings harvested`
-              : ""}
-          </Text>
-
-          {/* Non-blocking Rate-Limit / Partial Board Warnings */}
-          {Array.isArray(activeRun.warnings) && activeRun.warnings.length > 0 ? (
-            <View style={styles.warningBanner}>
-              <AlertTriangle size={15} color={COLORS.amber} style={{ marginTop: 1 }} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.warningTitle}>Partial Board Warning</Text>
-                {activeRun.warnings.map((warn, idx) => (
-                  <Text key={idx} style={styles.warningBody}>
-                    • {warn}
-                  </Text>
-                ))}
+            {/* Non-blocking Rate-Limit / Partial Board Warnings */}
+            {Array.isArray(activeRun?.warnings) && activeRun.warnings.length > 0 ? (
+              <View style={styles.warningBanner}>
+                <AlertTriangle size={15} color={COLORS.amber} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[styles.warningTitle, WEB_SANS]}>Partial Board Warning</Text>
+                  {activeRun.warnings.map((warn, idx) => (
+                    <Text key={idx} style={[styles.warningBody, WEB_SANS]}>
+                      • {warn}
+                    </Text>
+                  ))}
+                </View>
               </View>
-            </View>
-          ) : null}
+            ) : null}
+
+            {/* Failure Recovery */}
+            {isFailed || error ? (
+              <View style={styles.failureBox}>
+                <Text style={[styles.errorText, WEB_SANS]}>
+                  {error || activeRun?.status_detail || "JobSpy hunt failed."}
+                </Text>
+                <View style={styles.failureActions}>
+                  <Pressable
+                    onPress={() => setStage("config")}
+                    style={styles.secondaryOutlineBtn}
+                  >
+                    <Text style={[styles.secondaryOutlineText, WEB_SANS]}>
+                      Edit Search Config
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={handleStartHunt} style={styles.retryBtn}>
+                    <Text style={[styles.retryBtnText, WEB_SANS]}>Retry Hunt</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {/* Show Results CTA reveals ONLY once hunt finishes */}
+            {isCompleted ? (
+              <View style={styles.completionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Show Results"
+                  onPress={() => setStage("results")}
+                  style={({ pressed }) => [
+                    styles.showResultsCta,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <AuthButtonGradient />
+                  <View style={styles.gradientCtaInner}>
+                    <Text style={[styles.gradientCtaText, WEB_SANS]}>Show Results</Text>
+                    <ArrowRight size={18} color="#FFFFFF" />
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit Search Config"
+                  onPress={() => setStage("config")}
+                  style={({ pressed }) => [
+                    styles.editConfigLink,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={[styles.editConfigLinkText, WEB_SANS]}>
+                    Edit Search Config
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </ScrollView>
         </View>
       ) : null}
 
-      {/* Ranked Results List */}
-      {rankedJobs.length > 0 ? (
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsHeading}>
-            Top {rankedJobs.length} AI-Ranked Matches
-          </Text>
+      {/* ================================================================ */}
+      {/* SCREEN 3: RANKED RESULTS                                         */}
+      {/* ================================================================ */}
+      {stage === "results" ? (
+        <View style={styles.stageContainer}>
+          <View style={styles.headerBar}>
+            <View style={styles.headerLeftGroup}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to hunt progress"
+                onPress={() => setStage("progress")}
+                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+              >
+                <ArrowLeft size={20} color={COLORS.textPrimary} />
+              </Pressable>
+              <Text style={[styles.headerTitle, WEB_SANS]}>
+                Top {rankedJobs.length || requestedTopN} Matches
+              </Text>
+            </View>
 
-          {rankedJobs.map((job) => (
             <Pressable
-              key={job.id}
-              onPress={() => router.push(`/job/${job.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel="New Hunt"
+              onPress={() => setStage("config")}
               style={({ pressed }) => [
-                styles.jobCard,
-                pressed && { opacity: 0.88 },
+                styles.headerPillBtn,
+                pressed && { opacity: 0.8 },
               ]}
             >
-              <View style={styles.jobHeader}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.jobTitle}>{job.title}</Text>
-                  <Text style={styles.jobCompany}>
-                    {job.company}
-                    {job.location ? ` • ${job.location}` : ""}
-                  </Text>
-                </View>
-                <View style={styles.platformBadge}>
-                  <Text style={styles.platformBadgeText}>
-                    {(job.source_platform || "jobspy").toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.salaryRow}>
-                <DollarSign size={13} color={COLORS.emerald} />
-                <Text style={styles.salaryText}>
-                  {job.salary || "Salary not listed"}
-                </Text>
-              </View>
-
-              <Text style={styles.jobDescSnippet} numberOfLines={3} ellipsizeMode="tail">
-                {(job.description || "No description provided.").replace(/\s+/g, " ").trim()}
-              </Text>
-
-              {/* 4 Score Badges */}
-              <View style={styles.scoresGrid}>
-                <ScoreBadge label="Overall Fit" score={job.overall_fit_score} compact />
-                <ScoreBadge label="Skills" score={job.skills_match_score} compact />
-                <ScoreBadge label="Experience" score={job.experience_fit_score} compact />
-                <ScoreBadge label="ATS" score={job.ats_keyword_score} compact />
-              </View>
+              <Text style={[styles.headerPillText, WEB_SANS]}>New Hunt</Text>
             </Pressable>
-          ))}
+          </View>
+
+          <ScrollView
+            style={styles.flexScroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Emerald Results Banner */}
+            <View style={styles.resultsBanner}>
+              <Text style={[styles.resultsBannerTitle, WEB_SANS]}>
+                AI-Ranked Job Results
+              </Text>
+              <Text style={[styles.resultsBannerSub, WEB_SANS]}>
+                Ranked top {rankedJobs.length} of{" "}
+                {totalScraped > 0 ? totalScraped : rankedJobs.length} scraped jobs
+              </Text>
+            </View>
+
+            {rankedJobs.length === 0 ? (
+              <View style={styles.emptyResultsCard}>
+                <Text style={[styles.emptyResultsTitle, WEB_SANS]}>
+                  No ranked jobs returned
+                </Text>
+                <Text style={[styles.emptyResultsSub, WEB_SANS]}>
+                  Try widening your search radius, recency window, or job boards.
+                </Text>
+                <Pressable
+                  onPress={() => setStage("config")}
+                  style={styles.secondaryOutlineBtn}
+                >
+                  <Text style={[styles.secondaryOutlineText, WEB_SANS]}>
+                    Edit Search Config
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.resultsList}>
+                {rankedJobs.map((job) => {
+                  const scoreItems = [
+                    { label: "Overall Fit", score: job.overall_fit_score },
+                    { label: "Skills", score: job.skills_match_score },
+                    { label: "Experience", score: job.experience_fit_score },
+                    { label: "ATS", score: job.ats_keyword_score },
+                  ];
+
+                  return (
+                    <Pressable
+                      key={job.id}
+                      accessibilityRole="button"
+                      onPress={() => router.push(`/job/${job.id}`)}
+                      style={({ pressed }) => [
+                        styles.jobCard,
+                        pressed && { opacity: 0.88 },
+                      ]}
+                    >
+                      <View style={styles.jobHeader}>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={[styles.jobTitle, WEB_SANS]} numberOfLines={1}>
+                            {job.title}
+                          </Text>
+                          <Text style={[styles.jobCompany, WEB_SANS]} numberOfLines={1}>
+                            {job.company}
+                            {job.location ? ` • ${job.location}` : ""}
+                          </Text>
+                        </View>
+                        <View style={styles.platformBadge}>
+                          <Text style={[styles.platformBadgeText, WEB_SANS]}>
+                            {(job.source_platform || "jobspy").toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.jobMiddleRow}>
+                        <View style={styles.jobMiddleLeft}>
+                          <View style={styles.salaryRow}>
+                            <DollarSign size={13} color="#34D399" />
+                            <Text style={[styles.salaryText, WEB_SANS]}>
+                              {job.salary || "Salary not listed"}
+                            </Text>
+                          </View>
+
+                          <Text
+                            style={[styles.jobDescSnippet, WEB_SANS]}
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                          >
+                            {cleanMarkdownSnippet(job.description)}
+                          </Text>
+                        </View>
+                        <ChevronRight size={17} color="#64748B" />
+                      </View>
+
+                      {/* 4 Equal-Width Score Cards */}
+                      <View style={styles.scoresGrid}>
+                        {scoreItems.map((item) => {
+                          const theme = getScoreTheme(item.score);
+                          const rounded = Math.max(
+                            0,
+                            Math.min(100, Math.round(item.score || 0))
+                          );
+                          return (
+                            <View
+                              key={item.label}
+                              style={[
+                                styles.scoreBox,
+                                {
+                                  backgroundColor: theme.softBg,
+                                  borderColor: theme.border,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[styles.scoreBoxLabel, WEB_SANS]}
+                                numberOfLines={1}
+                              >
+                                {item.label}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.scoreBoxValue,
+                                  WEB_SANS,
+                                  { color: theme.color },
+                                ]}
+                              >
+                                {rounded}%
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
         </View>
       ) : null}
-    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screenRoot: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#070A12",
   },
-  scroll: {
-    padding: 16,
-    paddingBottom: 36,
-    gap: 14,
+  stageContainer: {
+    flex: 1,
+  },
+  flexScroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 28,
+    gap: 13,
+  },
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  headerLeftGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  backBtn: {
+    width: 28,
+    height: 32,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12.5,
+    marginTop: 1,
+  },
+  headerPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(22, 31, 51, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+  },
+  headerPillText: {
+    color: COLORS.textPrimary,
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   contextBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: COLORS.surface,
+    backgroundColor: "rgba(15, 22, 36, 0.90)",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     gap: 8,
   },
   contextItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flex: 1,
   },
+  profileDotWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(16, 185, 129, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contextText: {
-    fontSize: 12.5,
-    fontWeight: "700",
     color: COLORS.textPrimary,
+    fontSize: 13.5,
+    fontWeight: "600",
+    flex: 1,
   },
   modelPill: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: COLORS.purpleSoft,
+    backgroundColor: "rgba(124, 93, 250, 0.18)",
     borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
+    borderColor: "rgba(167, 139, 250, 0.45)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: 170,
   },
   modelPillText: {
+    color: "#E9D5FF",
     fontSize: 11,
     fontWeight: "700",
-    color: "#E9D5FF",
   },
   card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
+    backgroundColor: "rgba(15, 22, 36, 0.92)",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    gap: 13,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 18,
+    padding: 14,
+    gap: 11,
   },
   cardHeader: {
     flexDirection: "row",
@@ -628,43 +1280,43 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardTitle: {
-    fontSize: 15,
-    fontWeight: "800",
     color: COLORS.textPrimary,
+    fontSize: 15.5,
+    fontWeight: "700",
   },
   fieldGroup: {
     gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  labelIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
   },
   rowBetween: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  labelIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  label: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
-    backgroundColor: COLORS.inputBg,
+    gap: 10,
+    backgroundColor: "#090E1A",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 11,
-    paddingHorizontal: 11,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
   },
   input: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 13.5,
     color: COLORS.textPrimary,
+    fontSize: 14,
   },
   chipRow: {
     flexDirection: "row",
@@ -672,37 +1324,21 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   chip: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6.5,
     borderRadius: 999,
-    backgroundColor: COLORS.inputBg,
+    backgroundColor: "#0B111E",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "rgba(255, 255, 255, 0.10)",
   },
   chipActive: {
-    backgroundColor: COLORS.indigoSoft,
-    borderColor: COLORS.indigoBorder,
-  },
-  boardChip: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  boardChipActive: {
-    backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
-  },
-  boardChipPurple: {
-    backgroundColor: COLORS.purple,
-    borderColor: COLORS.purple,
+    backgroundColor: "rgba(99, 102, 241, 0.22)",
+    borderColor: "rgba(129, 140, 248, 0.60)",
   },
   chipText: {
-    fontSize: 12,
-    fontWeight: "600",
     color: COLORS.textSecondary,
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   chipTextActive: {
     color: "#FFFFFF",
@@ -712,132 +1348,393 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 9,
+    backgroundColor: "#0B111E",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 6,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
     paddingVertical: 3,
   },
   stepBtn: {
-    padding: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   stepVal: {
-    fontSize: 13,
-    fontWeight: "800",
     color: COLORS.textPrimary,
-    minWidth: 22,
+    fontSize: 13.5,
+    fontWeight: "800",
+    minWidth: 20,
     textAlign: "center",
+  },
+  boardChip: {
+    overflow: "hidden",
+    position: "relative",
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#0B111E",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.11)",
+  },
+  boardChipActive: {
+    borderColor: "rgba(167, 139, 250, 0.72)",
+  },
+  boardChipLabel: {
+    position: "relative",
+    zIndex: 2,
   },
   regionalToggle: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "#0B111E",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "rgba(255, 255, 255, 0.09)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 2,
   },
   regionalToggleText: {
+    color: COLORS.textSecondary,
     fontSize: 12,
     fontWeight: "600",
-    color: COLORS.textSecondary,
   },
   errorBanner: {
     backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
     borderWidth: 1,
+    borderColor: COLORS.roseBorder,
     borderRadius: 10,
     padding: 10,
   },
   errorText: {
-    fontSize: 12.5,
-    fontWeight: "600",
     color: "#FDA4AF",
+    fontSize: 12.5,
   },
-  huntBtn: {
+  gradientCta: {
+    height: 50,
+    borderRadius: 15,
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  gradientCtaInner: {
+    position: "relative",
+    zIndex: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: COLORS.indigo,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 2,
   },
-  huntBtnText: {
-    fontSize: 14.5,
-    fontWeight: "800",
+  gradientCtaText: {
     color: "#FFFFFF",
+    fontSize: 15.5,
+    fontWeight: "800",
   },
-  progressCard: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: 16,
+
+  /* Screen 2: Progress */
+  summaryCard: {
+    backgroundColor: "rgba(15, 24, 38, 0.94)",
     borderWidth: 1,
-    borderColor: COLORS.indigoBorder,
+    borderColor: "rgba(45, 212, 191, 0.25)",
+    borderRadius: 16,
     padding: 14,
-    gap: 9,
+    gap: 10,
   },
-  progressPhase: {
-    fontSize: 13.5,
-    fontWeight: "800",
+  summaryCardFailed: {
+    borderColor: COLORS.roseBorder,
+  },
+  summaryTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  summaryHeadline: {
     color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: "700",
+    flex: 1,
   },
-  progressPct: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: COLORS.indigo,
-    fontVariant: ["tabular-nums"],
+  summarySubCount: {
+    color: COLORS.textSecondary,
+    fontWeight: "500",
   },
   progressTrack: {
-    height: 7,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     overflow: "hidden",
   },
-  progressFill: {
+  progressBarWrap: {
     height: "100%",
     borderRadius: 999,
+    overflow: "hidden",
+    minWidth: 10,
   },
-  progressDetail: {
+  stepsStack: {
+    gap: 11,
+  },
+  stepCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    backgroundColor: "rgba(15, 22, 36, 0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.09)",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  stepCardDone: {
+    backgroundColor: "rgba(11, 36, 38, 0.90)",
+    borderColor: "rgba(16, 185, 129, 0.50)",
+  },
+  stepCardRunning: {
+    backgroundColor: "rgba(12, 30, 50, 0.94)",
+    borderColor: "rgba(34, 211, 238, 0.65)",
+  },
+  stepCardFailed: {
+    backgroundColor: "rgba(46, 16, 28, 0.90)",
+    borderColor: COLORS.roseBorder,
+  },
+  stepIconRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepIconRingDone: {
+    backgroundColor: "rgba(16, 185, 129, 0.14)",
+    borderColor: "rgba(52, 211, 153, 0.35)",
+  },
+  stepIconRingRunning: {
+    backgroundColor: "rgba(6, 182, 212, 0.16)",
+    borderColor: "rgba(34, 211, 238, 0.42)",
+  },
+  stepIconRingFailed: {
+    backgroundColor: COLORS.roseSoft,
+    borderColor: COLORS.roseBorder,
+  },
+  stepBody: {
+    flex: 1,
+    gap: 3,
+  },
+  stepTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  stepKicker: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  stepKickerDone: {
+    color: "#34D399",
+  },
+  stepKickerRunning: {
+    color: "#22D3EE",
+  },
+  stepKickerFailed: {
+    color: "#FB7185",
+  },
+  stepStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+  },
+  stepStatusPillDone: {
+    backgroundColor: "rgba(16, 185, 129, 0.18)",
+    borderColor: "rgba(52, 211, 153, 0.45)",
+  },
+  stepStatusPillRunning: {
+    backgroundColor: "rgba(6, 182, 212, 0.18)",
+    borderColor: "rgba(34, 211, 238, 0.48)",
+  },
+  stepStatusPillFailed: {
+    backgroundColor: COLORS.roseSoft,
+    borderColor: COLORS.roseBorder,
+  },
+  stepStatusTextDone: {
+    color: "#34D399",
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  stepStatusTextRunning: {
+    color: "#22D3EE",
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  stepStatusTextFailed: {
+    color: "#FDA4AF",
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  stepStatusTextPending: {
+    color: COLORS.textMuted,
+    fontSize: 10.5,
+    fontWeight: "600",
+  },
+  stepTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14.5,
+    fontWeight: "700",
+  },
+  stepSubtitle: {
+    color: "#CBD5E1",
     fontSize: 12,
-    color: COLORS.textSecondary,
+    lineHeight: 16.5,
+    opacity: 0.86,
   },
   warningBanner: {
     flexDirection: "row",
-    alignItems: "flex-start",
     gap: 8,
-    padding: 10,
-    borderRadius: 10,
     backgroundColor: COLORS.amberSoft,
     borderWidth: 1,
     borderColor: COLORS.amberBorder,
+    borderRadius: 12,
+    padding: 11,
   },
   warningTitle: {
+    color: "#FCD34D",
     fontSize: 12,
     fontWeight: "700",
-    color: "#FCD34D",
   },
   warningBody: {
-    fontSize: 11.5,
     color: "#FDE68A",
+    fontSize: 11.5,
     lineHeight: 16,
   },
-  resultsSection: {
+  failureBox: {
+    backgroundColor: COLORS.roseSoft,
+    borderWidth: 1,
+    borderColor: COLORS.roseBorder,
+    borderRadius: 14,
+    padding: 14,
     gap: 10,
   },
-  resultsHeading: {
-    fontSize: 15,
-    fontWeight: "800",
+  failureActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  secondaryOutlineBtn: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  secondaryOutlineText: {
     color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  retryBtn: {
+    flex: 1,
+    borderRadius: 999,
+    backgroundColor: COLORS.indigo,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  retryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  completionActions: {
+    marginTop: 6,
+    gap: 10,
+    alignItems: "center",
+  },
+  showResultsCta: {
+    width: "100%",
+    height: 50,
+    borderRadius: 999,
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editConfigLink: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  editConfigLinkText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+
+  /* Screen 3: Results */
+  resultsBanner: {
+    backgroundColor: "rgba(11, 42, 36, 0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.45)",
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    gap: 2,
+  },
+  resultsBannerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15.5,
+    fontWeight: "800",
+  },
+  resultsBannerSub: {
+    color: "#34D399",
+    fontSize: 12.5,
+    fontWeight: "600",
+  },
+  emptyResultsCard: {
+    backgroundColor: "rgba(15, 22, 36, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    gap: 10,
+  },
+  emptyResultsTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  emptyResultsSub: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  resultsList: {
+    gap: 11,
   },
   jobCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    backgroundColor: "rgba(15, 22, 36, 0.94)",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "rgba(255, 255, 255, 0.10)",
+    borderRadius: 16,
     padding: 14,
     gap: 9,
   },
@@ -848,27 +1745,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   jobTitle: {
-    fontSize: 15,
-    fontWeight: "800",
     color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
   },
   jobCompany: {
-    fontSize: 12.5,
-    fontWeight: "600",
     color: COLORS.textSecondary,
+    fontSize: 12,
   },
   platformBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: COLORS.cyanSoft,
+    backgroundColor: "rgba(6, 182, 212, 0.14)",
     borderWidth: 1,
-    borderColor: COLORS.cyanBorder,
+    borderColor: "rgba(34, 211, 238, 0.42)",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   platformBadgeText: {
+    color: "#22D3EE",
     fontSize: 10,
     fontWeight: "800",
-    color: "#67E8F9",
+    letterSpacing: 0.4,
+  },
+  jobMiddleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  jobMiddleLeft: {
+    flex: 1,
+    gap: 5,
   },
   salaryRow: {
     flexDirection: "row",
@@ -876,19 +1782,37 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   salaryText: {
+    color: "#34D399",
     fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.emerald,
+    fontWeight: "600",
   },
   jobDescSnippet: {
-    fontSize: 12.5,
-    lineHeight: 18,
     color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
   },
   scoresGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 6,
-    paddingTop: 2,
+    marginTop: 2,
+  },
+  scoreBox: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+  },
+  scoreBoxLabel: {
+    color: "#CBD5E1",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  scoreBoxValue: {
+    fontSize: 13.5,
+    fontWeight: "800",
   },
 });

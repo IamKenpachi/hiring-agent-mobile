@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents.adk_agents import rank_jobs_batch
+from app.agents.adk_agents import _should_use_fallback_directly, rank_jobs_batch
 from app.api._tailor_helper import (
     _safe_json_loads,
     execute_and_save_tailoring,
@@ -173,8 +173,13 @@ def _execute_hunt_run(
 
         run.warnings_json = json.dumps(warnings)
         run.total_scraped = len(raw_jobs)
+        run.status = "deduplicating"
+        run.progress_pct = 45.0
+        run.status_detail = f"Cleaned and verified {len(raw_jobs)} unique job descriptions."
+        session.commit()
+
         run.status = "ranking"
-        run.progress_pct = 60.0
+        run.progress_pct = 65.0
         run.status_detail = f"Scoring {len(raw_jobs)} scraped jobs via Google ADK JobMatcherAgent..."
         session.commit()
 
@@ -184,10 +189,19 @@ def _execute_hunt_run(
             api_key=api_key,
             model_name=model_name,
         )
+        if raw_jobs and in_tok + out_tok == 0 and not _should_use_fallback_directly(api_key):
+            warnings.append(
+                "Gemini AI ranking fell back to local keyword scoring; 0 API tokens were billed."
+            )
+            run.warnings_json = json.dumps(warnings)
         if in_tok + out_tok > 0:
             record_token_usage(session, user_id, model_name, "job_ranking", in_tok, out_tok)
 
         top_jobs = scored_jobs[:requested_top_n]
+        run.status = "finalizing"
+        run.progress_pct = 90.0
+        run.status_detail = f"Sorting top {len(top_jobs)} highest-fit matches..."
+        session.commit()
         for item in top_jobs:
             ranked = RankedJob(
                 id=str(uuid.uuid4()),

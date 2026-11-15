@@ -121,7 +121,8 @@ def revise_output(
         api_key=gemini_api_key,
         model_name=active_model,
     )
-    record_token_usage(db, current_user.id, active_model, "revision_copilot", in_tok, out_tok)
+    if in_tok + out_tok > 0:
+        record_token_usage(db, current_user.id, active_model, "revision_copilot", in_tok, out_tok)
 
     modified_md = str(revision.get("modified_markdown") or "").strip()
     explanation = str(revision.get("explanation") or "Applied requested edits.").strip()

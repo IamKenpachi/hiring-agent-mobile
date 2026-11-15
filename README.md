@@ -18,13 +18,13 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |                               OR 4-Step Questionnaire Wizard            |
 |  • home               Post-Login Home Hub (Hunter, Studio, History,     |
 |                       Master Profiles, & Account Menu)                  |
-|  • (tabs)/hunt        8-Board JobSpy Hunter + SSE Live Progress         |
+|  • (tabs)/hunt        3-Stage JobSpy Hunter (Config -> Live -> Results)   |
 |  • job/[id]           4-Score Fit Audit + Skills + "Yes, Tailor" CTA    |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
 |  • (tabs)/outputs     Saved Tailored Applications & Fit/ATS Badges      |
 |  • output/[id]        3-Slide Carousel (CV / Cover Letter / Keywords)   |
 |                       + AI Revision Copilot + A4 PDF Download/Share     |
-|  • (tabs)/settings    Multi-Profile Manager + Telemetry Dashboard       |
+|  • (tabs)/settings    Multi-Profile Manager, Live Key Check & Telemetry |
 +------------------------------------+------------------------------------+
                                      | HTTP / SSE + Bearer JWT
                                      | + X-Gemini-Api-Key + X-Gemini-Model
@@ -32,9 +32,9 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 +-------------------------------------------------------------------------+
 |                      FASTAPI + GOOGLE ADK (backend/)                    |
 |                                                                         |
-|  • /api/auth          Signup, Login, /me, Gemini Key & Model validation |
-|  • /api/profiles      Multi-Profile CRUD + /parse-preview + ProfileParserAgent |
-|  • /api/hunt          8-Board JobSpy Scraper + SSE + JobMatcherAgent    |
+|  • /api/auth          Signup, Login, /me, Live Gemini Key validation    |
+|  • /api/profiles      Multi-Profile CRUD + /parse-preview + ParserAgent |
+|  • /api/hunt          8-Board JobSpy Scraper + 4-Stage SSE + Matcher    |
 |  • /api/studio        JDExtractorAgent + ApplicationTailorPipeline      |
 |  • /api/outputs       Saved Outputs + RevisionCopilotAgent + fpdf2 PDFs |
 |  • /api/telemetry     Real-Time Token I/O & USD Cost Telemetry          |
@@ -69,6 +69,20 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 - `gemini-2.5-flash` *(Stable)*
 
 Users supply their own Gemini API key during onboarding (`expo-secure-store` on iOS/Android, `localStorage` on Web), transmitted per request via `X-Gemini-Api-Key` and `X-Gemini-Model`.
+
+---
+
+## Key Features & Recent Updates
+
+### 3-Screen JobSpy Hunt Flow (`(tabs)/hunt`)
+1. **Hunt Configuration**: Choose role query, location, search radius, work type, posting recency, Top-N results count, and multi-select primary/regional JobSpy platforms.
+2. **Live Execution Progress**: Streams live backend progress (SSE on Web, polling fallback on native) across 4 distinct stages — **Multi-Board JobSpy Scraping**, **Deduplication & Normalization**, **AI Match & ATS Scoring**, and **Ranking Top Matches** — with partial-board warnings, failure recovery controls, and a **Show Results →** transition CTA upon completion.
+3. **Top Ranked Matches**: Displays sorted job match cards with `Overall Fit`, `Skills`, `Experience`, and `ATS` score badges linking straight to `job/[id]`.
+
+### Live Key Verification, Error Handling & Telemetry Accuracy
+- **Live Gemini Key Validation**: `/api/auth/validate-gemini-key` defaults to `verify_live=True`, rejecting placeholders and invalid keys (`API_KEY_INVALID`) against Google Gemini before saving in Onboarding or Settings (with inline error banners in both screens).
+- **Explicit Auth Errors (`401`) & Clean Fallbacks**: Invalid/expired Gemini API keys raise `GeminiAuthError` rather than falling back silently; interactive routes return HTTP `401` JSON with CORS headers intact, and background hunts surface failure details on the Progress screen. Transient non-auth live fallbacks log zero phantom tokens (`record_token_usage` skipped when `0` tokens are returned).
+- **Safe Resume Parsing & PostgreSQL Integrity**: `CatchAllExceptionMiddleware` preserves `Access-Control-Allow-Origin` headers on unexpected `500` JSON responses, `/api/profiles/upload-pdf` and `/api/profiles/parse-preview` strip `\x00` NUL bytes and execute synchronously off the event loop, and profile creation + token telemetry commit atomically.
 
 ---
 

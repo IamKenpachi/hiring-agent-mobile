@@ -50,6 +50,7 @@ export default function TabsLayout() {
         options={{
           title: "JobSpy Hunter",
           tabBarLabel: "Hunt",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Radar size={size} color={color} />,
         }}
       />

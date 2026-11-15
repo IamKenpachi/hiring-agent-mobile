@@ -105,7 +105,8 @@ def execute_and_save_tailoring(
         api_key=api_key,
         model_name=resolved_model,
     )
-    record_token_usage(db, user_id, resolved_model, "application_tailor", in_tok, out_tok)
+    if in_tok + out_tok > 0:
+        record_token_usage(db, user_id, resolved_model, "application_tailor", in_tok, out_tok)
 
     output_id = str(uuid.uuid4())
     cv_md = str(result.get("cv_markdown") or "").strip()

@@ -28,6 +28,7 @@ def record_token_usage(
     operation_type: str,
     input_tokens: int,
     output_tokens: int,
+    commit: bool = True,
 ) -> Dict[str, Any]:
     """Persist a TokenUsage record to the database and return serialized telemetry."""
     resolved_model = resolve_gemini_model(model_name)
@@ -45,8 +46,11 @@ def record_token_usage(
         estimated_cost_usd=est_cost,
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
 
     return {
         "id": row.id,

@@ -114,7 +114,15 @@ export interface SearchRun {
   hours_old: number;
   work_type: string;
   requested_top_n: number;
-  status: "pending" | "scraping" | "ranking" | "completed" | "failed" | string;
+  status:
+    | "pending"
+    | "scraping"
+    | "deduplicating"
+    | "ranking"
+    | "finalizing"
+    | "completed"
+    | "failed"
+    | string;
   progress_pct: number;
   status_detail: string;
   warnings: string[];

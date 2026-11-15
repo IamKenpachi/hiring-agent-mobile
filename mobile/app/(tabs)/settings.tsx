@@ -52,6 +52,7 @@ export default function SettingsScreen() {
   const [showKey, setShowKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [keyMessage, setKeyMessage] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -76,22 +77,26 @@ export default function SettingsScreen() {
   const handleSaveKey = async () => {
     const clean = apiKeyInput.trim();
     if (!clean) {
-      setError("Gemini API Key cannot be empty.");
+      setKeyError("Gemini API Key cannot be empty.");
       return;
     }
     setSavingKey(true);
+    setKeyError(null);
     setError(null);
     setKeyMessage(null);
     try {
-      const res = await apiClient.validateGeminiKey(clean, selectedModel);
+      const res = await apiClient.validateGeminiKey(clean, selectedModel, true);
       if (!res.valid) {
-        setError("Key validation failed.");
+        setKeyError(
+          res.detail ||
+            "Gemini API key was rejected by Google. Check or regenerate your key in Google AI Studio."
+        );
         return;
       }
       await setGeminiKey(clean);
-      setKeyMessage("Gemini API Key validated & saved to device storage.");
+      setKeyMessage("Gemini API Key live-verified & saved to device storage.");
     } catch (err) {
-      setError(
+      setKeyError(
         err instanceof ApiError
           ? err.message
           : err instanceof Error
@@ -336,7 +341,11 @@ export default function SettingsScreen() {
         <View style={styles.keyInputWrap}>
           <TextInput
             value={apiKeyInput}
-            onChangeText={setApiKeyInput}
+            onChangeText={(val) => {
+              setApiKeyInput(val);
+              if (keyError) setKeyError(null);
+              if (keyMessage) setKeyMessage(null);
+            }}
             placeholder="AIzaSy..."
             placeholderTextColor={COLORS.textMuted}
             secureTextEntry={!showKey}
@@ -352,6 +361,12 @@ export default function SettingsScreen() {
             )}
           </Pressable>
         </View>
+
+        {keyError ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{keyError}</Text>
+          </View>
+        ) : null}
 
         {keyMessage ? (
           <View style={styles.successBanner}>
