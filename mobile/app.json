@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Hiring Agent Mobile",
+    "slug": "hiring-agent-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "hiring-agent",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#090D16"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hiringagent.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#090D16"
+      },
+      "package": "com.hiringagent.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
+

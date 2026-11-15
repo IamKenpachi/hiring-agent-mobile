@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Expo / Metro / Web build artifacts
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+.metro-health-check*
+
+# Environment & secrets (keep *.env.example)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# Local generated outputs / databases
+backend/data/outputs/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs & OS files
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.DS_Store
+Thumbs.db

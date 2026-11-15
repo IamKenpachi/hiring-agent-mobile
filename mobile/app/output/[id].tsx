@@ -1,0 +1,1127 @@
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  LayoutChangeEvent,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import {
+  Bot,
+  CheckCircle2,
+  Download,
+  FileText,
+  Mail,
+  MessageSquareText,
+  Send,
+  Sparkles,
+  Target,
+  User as UserIcon,
+  X,
+  XCircle,
+  Zap,
+} from "lucide-react-native";
+import { COLORS, formatDisplayDate } from "../../src/constants/theme";
+import { useAuth } from "../../src/context/AuthContext";
+import { apiClient, ApiError, buildAuthHeaders } from "../../src/lib/api";
+import { HtmlDocumentViewer } from "../../src/components/HtmlDocumentViewer";
+import { ScoreBadge, ScoreBar } from "../../src/components/ScoreBadge";
+import type { TailoredOutput } from "../../src/types";
+
+const SLIDES = [
+  { key: "cv", label: "Tailored CV", icon: FileText },
+  { key: "cl", label: "Cover Letter", icon: Mail },
+  { key: "scores", label: "Scores & Keywords", icon: Target },
+] as const;
+
+const QUICK_ACTIONS: Array<{ label: string; docType?: "cv" | "cover_letter" }> = [
+  { label: "Remove injected keywords I don't know", docType: "cv" },
+  { label: "Make summary more concise", docType: "cv" },
+  { label: "Emphasize quantifiable metrics", docType: "cv" },
+  { label: "Make Cover Letter hook stronger", docType: "cover_letter" },
+];
+
+export default function OutputDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { width: windowWidth } = useWindowDimensions();
+  const { selectedModel, refreshTelemetry } = useAuth();
+
+  const [output, setOutput] = useState<TailoredOutput | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [carouselWidth, setCarouselWidth] = useState(windowWidth);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const carouselRef = useRef<ScrollView>(null);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [targetDoc, setTargetDoc] = useState<"cv" | "cover_letter">("cv");
+  const [chatInput, setChatInput] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [reviseError, setReviseError] = useState<string | null>(null);
+  const [downloadingType, setDownloadingType] = useState<"cv" | "cover_letter" | null>(
+    null
+  );
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const chatScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadOutput = async () => {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const detail = await apiClient.getOutputDetail(String(id));
+        if (active) setOutput(detail);
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : "Failed to load tailored application."
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void loadOutput();
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(null), 3500);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
+
+  const handleLayout = (event: LayoutChangeEvent) => {
+    const w = event.nativeEvent.layout.width;
+    if (w > 0 && Math.abs(w - carouselWidth) > 2) {
+      setCarouselWidth(w);
+    }
+  };
+
+  const goToSlide = (index: number) => {
+    setActiveSlide(index);
+    carouselRef.current?.scrollTo({ x: index * carouselWidth, animated: true });
+    if (index === 0) setTargetDoc("cv");
+    if (index === 1) setTargetDoc("cover_letter");
+  };
+
+  const handleRevise = async (instructionText?: string, overrideDocType?: "cv" | "cover_letter") => {
+    if (!output || revising) return;
+    const cleanInstruction = (instructionText ?? chatInput).trim();
+    if (!cleanInstruction) return;
+
+    const docTypeToUse = overrideDocType ?? targetDoc;
+    if (!instructionText) setChatInput("");
+    setRevising(true);
+    setReviseError(null);
+
+    try {
+      const result = await apiClient.reviseOutput(output.id, {
+        doc_type: docTypeToUse,
+        instruction: cleanInstruction,
+        model: selectedModel,
+      });
+      setOutput(result.output);
+      await refreshTelemetry();
+      setToastMsg(
+        docTypeToUse === "cv"
+          ? "Tailored CV revised & re-scored"
+          : "Cover Letter revised & re-scored"
+      );
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 120);
+    } catch (err) {
+      setReviseError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Revision request failed."
+      );
+    } finally {
+      setRevising(false);
+    }
+  };
+
+  const handleDownloadPdf = async (docType: "cv" | "cover_letter") => {
+    if (!output || downloadingType) return;
+    setDownloadingType(docType);
+    setError(null);
+    const url = apiClient.getOutputPdfUrl(output.id, docType);
+    const safeCompany = (output.company || "Application")
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .slice(0, 30);
+    const filename = `${safeCompany}_${docType === "cv" ? "CV" : "Cover_Letter"}.pdf`;
+
+    try {
+      const headers = await buildAuthHeaders(undefined, false);
+      if (Platform.OS === "web") {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          throw new Error(`PDF download failed (${res.status})`);
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = blobUrl;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(blobUrl);
+        setToastMsg(`Downloaded ${filename}`);
+      } else {
+        const targetFile = new File(Paths.cache, filename);
+        const downloaded = await File.downloadFileAsync(url, targetFile, {
+          headers,
+          idempotent: true,
+        });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(downloaded.uri, {
+            mimeType: "application/pdf",
+            dialogTitle: `Share ${filename}`,
+          });
+        } else {
+          setToastMsg(`Saved PDF to ${downloaded.uri}`);
+        }
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not download PDF document."
+      );
+    } finally {
+      setDownloadingType(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.indigo} />
+        <Text style={styles.centerText}>Loading Tailored Output Studio...</Text>
+      </View>
+    );
+  }
+
+  if (!output) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{error || "Output not found."}</Text>
+      </View>
+    );
+  }
+
+  const chatHistory = Array.isArray(output.chat_history) ? output.chat_history : [];
+
+  return (
+    <View style={styles.root}>
+      {/* Compact Header Summary */}
+      <View style={styles.headerStrip}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.jobTitle} numberOfLines={1}>
+            {output.job_title} @ {output.company}
+          </Text>
+          <View style={styles.scoreMiniRow}>
+            <ScoreBadge label="Fit" score={output.overall_fit_score} compact />
+            <ScoreBadge label="ATS" score={output.ats_keyword_score} compact />
+            <Text style={styles.modelLabel}>{output.model_used}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Top Pill Carousel Switcher */}
+      <View style={styles.pillBar}>
+        {SLIDES.map((slide, idx) => {
+          const Icon = slide.icon;
+          const active = activeSlide === idx;
+          return (
+            <Pressable
+              key={slide.key}
+              onPress={() => goToSlide(idx)}
+              style={[styles.pillTab, active && styles.pillTabActive]}
+            >
+              <Icon
+                size={13}
+                color={active ? "#FFFFFF" : COLORS.textSecondary}
+              />
+              <Text style={[styles.pillTabText, active && styles.pillTabTextActive]}>
+                {slide.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {toastMsg ? (
+        <View style={styles.toastBar}>
+          <CheckCircle2 size={14} color={COLORS.emerald} />
+          <Text style={styles.toastText}>{toastMsg}</Text>
+        </View>
+      ) : null}
+
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {/* Swipeable Horizontal Carousel */}
+      <View style={styles.carouselContainer} onLayout={handleLayout}>
+        <ScrollView
+          ref={carouselRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const offsetX = e.nativeEvent.contentOffset.x;
+            const nextIdx = Math.round(offsetX / Math.max(1, carouselWidth));
+            if (nextIdx !== activeSlide && nextIdx >= 0 && nextIdx <= 2) {
+              setActiveSlide(nextIdx);
+              if (nextIdx === 0) setTargetDoc("cv");
+              if (nextIdx === 1) setTargetDoc("cover_letter");
+            }
+          }}
+        >
+          {/* Slide 1: Tailored CV */}
+          <View style={[styles.slidePage, { width: carouselWidth }]}>
+            <HtmlDocumentViewer
+              html={output.cv_html}
+              markdownFallback={output.cv_markdown}
+              title="Tailored CV (A4 Executive Modern)"
+            />
+          </View>
+
+          {/* Slide 2: Tailored Cover Letter */}
+          <View style={[styles.slidePage, { width: carouselWidth }]}>
+            <HtmlDocumentViewer
+              html={output.cover_letter_html}
+              markdownFallback={output.cover_letter_markdown}
+              title="Tailored Cover Letter (A4 Executive Modern)"
+            />
+          </View>
+
+          {/* Slide 3: 4-Score Breakdown & Injected Keywords Inspector */}
+          <ScrollView
+            style={[styles.slidePage, { width: carouselWidth }]}
+            contentContainerStyle={styles.inspectorScroll}
+          >
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>4-Dimension Tailored Score</Text>
+              <ScoreBar label="Overall Fit" score={output.overall_fit_score} />
+              <ScoreBar label="Skills Match" score={output.skills_match_score} />
+              <ScoreBar label="Experience Fit" score={output.experience_fit_score} />
+              <ScoreBar label="ATS Keyword Score" score={output.ats_keyword_score} />
+            </View>
+
+            {/* Aggressive Keyword Injection Inspector */}
+            <View style={[styles.card, styles.injectedCard]}>
+              <View style={styles.cardTitleRow}>
+                <Zap size={16} color={COLORS.purple} />
+                <Text style={styles.cardTitle}>
+                  Aggressively Injected Keywords ({output.injected_keywords?.length || 0})
+                </Text>
+              </View>
+              <Text style={styles.injectedNote}>
+                These missing job description keywords were naturally woven into your CV
+                to maximize ATS alignment. Open AI Revision Copilot if you don't know any
+                of them and want them removed cleanly.
+              </Text>
+              <View style={styles.chipWrap}>
+                {output.injected_keywords?.length ? (
+                  output.injected_keywords.map((kw, idx) => (
+                    <View key={`${kw}-${idx}`} style={styles.injectedChip}>
+                      <Text style={styles.injectedChipText}>+ {kw}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.muted}>
+                    No additional keywords needed to be injected.
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Matched & Missing Skills */}
+            <View style={styles.card}>
+              <View style={styles.cardTitleRow}>
+                <CheckCircle2 size={15} color={COLORS.emerald} />
+                <Text style={styles.cardTitle}>
+                  Matched Skills ({output.matched_skills?.length || 0})
+                </Text>
+              </View>
+              <View style={styles.chipWrap}>
+                {output.matched_skills?.map((s, idx) => (
+                  <View key={`${s}-${idx}`} style={styles.matchedChip}>
+                    <Text style={styles.matchedText}>{s}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={[styles.cardTitleRow, { marginTop: 6 }]}>
+                <XCircle size={15} color={COLORS.rose} />
+                <Text style={styles.cardTitle}>
+                  Remaining Missing Skills ({output.missing_skills?.length || 0})
+                </Text>
+              </View>
+              <View style={styles.chipWrap}>
+                {output.missing_skills?.length ? (
+                  output.missing_skills.map((s, idx) => (
+                    <View key={`${s}-${idx}`} style={styles.missingChip}>
+                      <Text style={styles.missingText}>{s}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.muted}>Zero missing keywords remaining!</Text>
+                )}
+              </View>
+            </View>
+
+            {(output.match_reason || output.recommendation) ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>AI Rationale & Strategy</Text>
+                {output.match_reason ? (
+                  <Text style={styles.bodyText}>{output.match_reason}</Text>
+                ) : null}
+                {output.recommendation ? (
+                  <Text style={[styles.bodyText, { color: "#E9D5FF" }]}>
+                    {output.recommendation}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </ScrollView>
+        </ScrollView>
+      </View>
+
+      {/* Bottom Action Bar: Download/Share PDFs + Open AI Revision Copilot */}
+      <View style={styles.bottomBar}>
+        <View style={styles.pdfRow}>
+          <Pressable
+            onPress={() => void handleDownloadPdf("cv")}
+            disabled={downloadingType !== null}
+            style={styles.pdfBtn}
+          >
+            {downloadingType === "cv" ? (
+              <ActivityIndicator size="small" color={COLORS.textPrimary} />
+            ) : (
+              <Download size={14} color={COLORS.indigo} />
+            )}
+            <Text style={styles.pdfBtnText}>CV PDF</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => void handleDownloadPdf("cover_letter")}
+            disabled={downloadingType !== null}
+            style={styles.pdfBtn}
+          >
+            {downloadingType === "cover_letter" ? (
+              <ActivityIndicator size="small" color={COLORS.textPrimary} />
+            ) : (
+              <Download size={14} color={COLORS.purple} />
+            )}
+            <Text style={styles.pdfBtnText}>Cover Letter PDF</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setChatOpen(true)}
+            style={styles.copilotBtn}
+          >
+            <MessageSquareText size={15} color="#FFFFFF" />
+            <Text style={styles.copilotBtnText}>AI Revise</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* AI Revision Chat Drawer / Modal */}
+      <Modal
+        visible={chatOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setReviseError(null);
+          setChatOpen(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalRoot}
+        >
+          {/* Drawer Header */}
+          <View style={styles.drawerHeader}>
+            <View style={styles.drawerTitleWrap}>
+              <View style={styles.botAvatar}>
+                <Bot size={16} color="#E9D5FF" />
+              </View>
+              <View>
+                <Text style={styles.drawerTitle}>AI Revision Copilot</Text>
+                <Text style={styles.drawerSub}>
+                  {output.job_title} @ {output.company} • {selectedModel}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => {
+                setReviseError(null);
+                setChatOpen(false);
+              }}
+              style={styles.closeBtn}
+            >
+              <X size={18} color={COLORS.textSecondary} />
+            </Pressable>
+          </View>
+
+          {reviseError ? (
+            <View style={[styles.errorBanner, { marginTop: 8, marginBottom: 0 }]}>
+              <Text style={styles.errorText}>{reviseError}</Text>
+            </View>
+          ) : null}
+
+          {/* Target Document Toggle */}
+          <View style={styles.docToggleRow}>
+            <Pressable
+              onPress={() => setTargetDoc("cv")}
+              style={[
+                styles.docToggleBtn,
+                targetDoc === "cv" && styles.docToggleActive,
+              ]}
+            >
+              <FileText
+                size={13}
+                color={targetDoc === "cv" ? "#FFFFFF" : COLORS.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.docToggleText,
+                  targetDoc === "cv" && styles.docToggleTextActive,
+                ]}
+              >
+                Revise CV
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setTargetDoc("cover_letter")}
+              style={[
+                styles.docToggleBtn,
+                targetDoc === "cover_letter" && styles.docToggleActivePurple,
+              ]}
+            >
+              <Mail
+                size={13}
+                color={targetDoc === "cover_letter" ? "#FFFFFF" : COLORS.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.docToggleText,
+                  targetDoc === "cover_letter" && styles.docToggleTextActive,
+                ]}
+              >
+                Revise Cover Letter
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Chat Conversation History */}
+          <ScrollView
+            ref={chatScrollRef}
+            style={styles.chatList}
+            contentContainerStyle={styles.chatListContent}
+          >
+            {chatHistory.length === 0 ? (
+              <View style={styles.emptyChat}>
+                <Sparkles size={20} color={COLORS.purple} />
+                <Text style={styles.emptyChatText}>
+                  Ask the AI Copilot to refine bullets, remove injected keywords you don't
+                  know, or change the Cover Letter hook.
+                </Text>
+              </View>
+            ) : (
+              chatHistory.map((msg, idx) => {
+                const isUser = msg.role === "user";
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.msgRow,
+                      isUser ? styles.msgRowUser : styles.msgRowAssistant,
+                    ]}
+                  >
+                    {!isUser ? (
+                      <View style={styles.msgIconBot}>
+                        <Bot size={13} color="#E9D5FF" />
+                      </View>
+                    ) : null}
+                    <View
+                      style={[
+                        styles.msgBubble,
+                        isUser ? styles.msgBubbleUser : styles.msgBubbleBot,
+                      ]}
+                    >
+                      <Text style={styles.msgText}>{msg.content}</Text>
+                      {msg.timestamp ? (
+                        <Text style={styles.msgTime}>
+                          {formatDisplayDate(msg.timestamp)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {isUser ? (
+                      <View style={styles.msgIconUser}>
+                        <UserIcon size={13} color={COLORS.textSecondary} />
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+
+            {revising ? (
+              <View style={styles.revisingRow}>
+                <ActivityIndicator size="small" color={COLORS.purple} />
+                <Text style={styles.revisingText}>
+                  Copilot is rewriting & re-scoring your {targetDoc === "cv" ? "CV" : "Cover Letter"}...
+                </Text>
+              </View>
+            ) : null}
+          </ScrollView>
+
+          {/* Quick-Action Chips */}
+          <View style={styles.quickActionsWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickActionsRow}
+            >
+              {QUICK_ACTIONS.map((qa) => (
+                <Pressable
+                  key={qa.label}
+                  disabled={revising}
+                  onPress={() => {
+                    if (qa.docType) setTargetDoc(qa.docType);
+                    void handleRevise(qa.label, qa.docType ?? targetDoc);
+                  }}
+                  style={styles.quickChip}
+                >
+                  <Sparkles size={11} color={COLORS.purple} />
+                  <Text style={styles.quickChipText}>{qa.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Chat Input Bar */}
+          <View style={styles.chatInputBar}>
+            <TextInput
+              value={chatInput}
+              onChangeText={setChatInput}
+              placeholder={`Instruct AI to update ${targetDoc === "cv" ? "CV" : "Cover Letter"}...`}
+              placeholderTextColor={COLORS.textMuted}
+              editable={!revising}
+              style={styles.chatInput}
+              onSubmitEditing={() => void handleRevise()}
+            />
+            <Pressable
+              onPress={() => void handleRevise()}
+              disabled={revising || !chatInput.trim()}
+              style={[
+                styles.sendBtn,
+                (revising || !chatInput.trim()) && { opacity: 0.45 },
+              ]}
+            >
+              <Send size={15} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  center: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 20,
+  },
+  centerText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  headerStrip: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  jobTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  scoreMiniRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  modelLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.textMuted,
+    marginLeft: 4,
+  },
+  pillBar: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  pillTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pillTabActive: {
+    backgroundColor: COLORS.indigo,
+    borderColor: COLORS.indigo,
+  },
+  pillTabText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  pillTabTextActive: {
+    color: "#FFFFFF",
+  },
+  toastBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginHorizontal: 14,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: COLORS.emeraldSoft,
+    borderWidth: 1,
+    borderColor: COLORS.emeraldBorder,
+  },
+  toastText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6EE7B7",
+  },
+  errorBanner: {
+    marginHorizontal: 14,
+    marginBottom: 4,
+    padding: 9,
+    borderRadius: 9,
+    backgroundColor: COLORS.roseSoft,
+    borderWidth: 1,
+    borderColor: COLORS.roseBorder,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#FDA4AF",
+    fontWeight: "600",
+  },
+  carouselContainer: {
+    flex: 1,
+  },
+  slidePage: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  inspectorScroll: {
+    gap: 12,
+    paddingBottom: 24,
+  },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    gap: 11,
+  },
+  injectedCard: {
+    borderColor: COLORS.purpleBorder,
+    backgroundColor: "rgba(168, 85, 247, 0.08)",
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  injectedNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.textSecondary,
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  injectedChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.purpleSoft,
+    borderWidth: 1,
+    borderColor: COLORS.purpleBorder,
+  },
+  injectedChipText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#E9D5FF",
+  },
+  matchedChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.emeraldSoft,
+    borderWidth: 1,
+    borderColor: COLORS.emeraldBorder,
+  },
+  matchedText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#6EE7B7",
+  },
+  missingChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.roseSoft,
+    borderWidth: 1,
+    borderColor: COLORS.roseBorder,
+  },
+  missingText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#FDA4AF",
+  },
+  muted: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  bodyText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+  },
+  bottomBar: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: COLORS.tabBarBg,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  pdfRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pdfBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 11,
+    borderRadius: 11,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pdfBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  copilotBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 11,
+    backgroundColor: COLORS.purple,
+  },
+  copilotBtnText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  modalRoot: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  drawerTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  botAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: COLORS.purpleSoft,
+    borderWidth: 1,
+    borderColor: COLORS.purpleBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  drawerTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  drawerSub: {
+    fontSize: 11.5,
+    color: COLORS.textSecondary,
+  },
+  closeBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  docToggleRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: COLORS.surfaceElevated,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  docToggleBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 9,
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  docToggleActive: {
+    backgroundColor: COLORS.indigo,
+    borderColor: COLORS.indigo,
+  },
+  docToggleActivePurple: {
+    backgroundColor: COLORS.purple,
+    borderColor: COLORS.purple,
+  },
+  docToggleText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  docToggleTextActive: {
+    color: "#FFFFFF",
+  },
+  chatList: {
+    flex: 1,
+  },
+  chatListContent: {
+    padding: 14,
+    gap: 12,
+  },
+  emptyChat: {
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: COLORS.purpleSoft,
+    borderWidth: 1,
+    borderColor: COLORS.purpleBorder,
+    gap: 6,
+  },
+  emptyChatText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: COLORS.textPrimary,
+  },
+  msgRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  msgRowUser: {
+    justifyContent: "flex-end",
+  },
+  msgRowAssistant: {
+    justifyContent: "flex-start",
+  },
+  msgIconBot: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: COLORS.purpleSoft,
+    borderWidth: 1,
+    borderColor: COLORS.purpleBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  msgIconUser: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  msgBubble: {
+    maxWidth: "80%",
+    padding: 11,
+    borderRadius: 14,
+    gap: 4,
+  },
+  msgBubbleBot: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopLeftRadius: 4,
+  },
+  msgBubbleUser: {
+    backgroundColor: COLORS.indigo,
+    borderTopRightRadius: 4,
+  },
+  msgText: {
+    fontSize: 13,
+    lineHeight: 18.5,
+    color: COLORS.textPrimary,
+  },
+  msgTime: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.55)",
+  },
+  revisingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  revisingText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  quickActionsWrap: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.surfaceElevated,
+    paddingVertical: 8,
+  },
+  quickActionsRow: {
+    paddingHorizontal: 12,
+    gap: 7,
+  },
+  quickChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.purpleSoft,
+    borderWidth: 1,
+    borderColor: COLORS.purpleBorder,
+  },
+  quickChipText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#E9D5FF",
+  },
+  chatInputBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: COLORS.textPrimary,
+  },
+  sendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    backgroundColor: COLORS.purple,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
