@@ -8,7 +8,13 @@ import React, {
 } from "react";
 import { apiClient, DEFAULT_AVAILABLE_MODELS, syncApiCredentials } from "../lib/api";
 import { DEFAULT_GEMINI_MODEL, secureStorage } from "../lib/storage";
-import type { ModelOption, Profile, TokenTelemetry, User } from "../types";
+import type {
+  ModelOption,
+  Profile,
+  ProfileCreatePayload,
+  TokenTelemetry,
+  User,
+} from "../types";
 
 interface AuthContextValue {
   isReady: boolean;
@@ -21,8 +27,15 @@ interface AuthContextValue {
   profiles: Profile[];
   activeProfile: Profile | null;
   tokenTelemetry: TokenTelemetry | null;
+  onboardingDraft: ProfileCreatePayload | null;
+  setOnboardingDraft: (draft: ProfileCreatePayload | null) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName?: string) => Promise<void>;
+  signUpWithOnboarding: (
+    email: string,
+    password: string,
+    draft: ProfileCreatePayload
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   setGeminiKey: (key: string) => Promise<void>;
   setSelectedModel: (model: string) => Promise<void>;
@@ -46,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tokenTelemetry, setTokenTelemetry] = useState<TokenTelemetry | null>(null);
+  const [onboardingDraft, setOnboardingDraft] = useState<ProfileCreatePayload | null>(null);
 
   const pingHealth = useCallback(async (): Promise<boolean> => {
     try {
@@ -159,6 +173,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refreshProfiles, refreshTelemetry]
   );
 
+  const signUpWithOnboarding = useCallback(
+    async (email: string, password: string, draft: ProfileCreatePayload) => {
+      const auth = await apiClient.signUp(email.trim(), password, draft.full_name);
+      await secureStorage.setAuthToken(auth.access_token);
+      syncApiCredentials({ token: auth.access_token });
+
+      const created = await apiClient.createProfile({
+        ...draft,
+        email: draft.email?.trim() || email.trim(),
+        is_default: true,
+      });
+
+      setProfiles([created]);
+      setOnboardingDraft(null);
+      setUser(auth.user);
+      setToken(auth.access_token);
+      await refreshTelemetry();
+    },
+    [refreshTelemetry]
+  );
+
   const signOut = useCallback(async () => {
     await secureStorage.clearAuthSession();
     syncApiCredentials({ token: null });
@@ -166,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setProfiles([]);
     setTokenTelemetry(null);
+    setOnboardingDraft(null);
   }, []);
 
   const setGeminiKey = useCallback(async (key: string) => {
@@ -207,8 +243,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profiles,
       activeProfile,
       tokenTelemetry,
+      onboardingDraft,
+      setOnboardingDraft,
       signIn,
       signUp,
+      signUpWithOnboarding,
       signOut,
       setGeminiKey,
       setSelectedModel,
@@ -228,8 +267,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profiles,
       activeProfile,
       tokenTelemetry,
+      onboardingDraft,
       signIn,
       signUp,
+      signUpWithOnboarding,
       signOut,
       setGeminiKey,
       setSelectedModel,

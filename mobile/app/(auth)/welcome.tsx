@@ -51,7 +51,7 @@ export default function WelcomeScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Get Started"
-              onPress={() => router.push("/(auth)/login?mode=signup")}
+              onPress={() => router.push("/(auth)/onboarding")}
               className="h-[48px] w-full items-center justify-center overflow-hidden rounded-full border border-white/[0.08] active:opacity-90"
             >
               <PrimaryPillGradient />

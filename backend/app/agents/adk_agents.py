@@ -355,7 +355,11 @@ def _build_adk_model(model_name: Optional[str], api_key: Optional[str]) -> Gemin
     client_kwargs: Dict[str, Any] = {}
     if api_key and api_key.strip():
         client_kwargs["api_key"] = api_key.strip()
-    return Gemini(model=resolved, client_kwargs=client_kwargs or None)
+    return Gemini(
+        model=resolved,
+        retry_options=types.HttpRetryOptions(attempts=2),
+        client_kwargs=client_kwargs or None,
+    )
 
 
 def create_profile_parser_agent(
@@ -911,53 +915,78 @@ def _fallback_parse_profile(raw_text: str) -> Dict[str, Any]:
     elif lines:
         summary = f"Experienced professional specializing in {', '.join(skills[:5])}."
 
-    # Extract bulleted experience / lines
+    # Extract role experience lines accurately without matching emails or hyphenated words
     experience: List[Dict[str, Any]] = []
-    exp_headers = re.findall(
-        r"(?:\*\*)?([A-Za-z0-9 /&+-]{3,50})(?:\*\*)?\s*(?:—|-|at|@)\s*([A-Za-z0-9 .&,-]{2,50})(?:\s*\|\s*([^\n]+))?",
-        text,
+    exp_line_re = re.compile(
+        r"^([A-Za-z0-9 /&+]{3,50}?)\s+(?:—|–|-|\bat\b)\s+([A-Za-z0-9 .&,'-]{2,50}?)(?:\s*\|\s*(.+))?$"
     )
-    for title, comp, dates in exp_headers[:4]:
-        if any(k in title.lower() for k in ("university", "college", "b.sc", "m.sc", "bachelor", "master")):
+    all_bullets = [ln.lstrip("-*• ").strip() for ln in lines if ln.startswith(("-", "*", "•"))]
+    for ln in lines:
+        ln_clean = re.sub(r"^(?:#+\s*|[-*•]\s*)", "", ln).replace("**", "").strip()
+        if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower() or "linkedin.com" in ln_clean.lower():
             continue
-        experience.append(
-            {
-                "title": title.strip(),
-                "company": comp.strip(),
-                "duration": (dates or "Recent").strip(),
-                "location": location,
-                "highlights": [ln.lstrip("-*• ").strip() for ln in lines if ln.startswith(("-", "*", "•"))][:3]
-                or [f"Delivered measurable analytics and engineering outcomes using {', '.join(skills[:3])}."],
-            }
-        )
+        low = ln_clean.lower()
+        if any(k in low for k in ("university", "college", "b.sc", "bsc", "m.sc", "msc", "b.a.", "m.a.", "ph.d", "phd", "bachelor", "master")):
+            continue
+        m = exp_line_re.match(ln_clean)
+        if m:
+            title, comp, dates = m.group(1), m.group(2), m.group(3)
+            experience.append(
+                {
+                    "title": title.strip(),
+                    "company": comp.strip(),
+                    "duration": (dates or "Recent").strip(),
+                    "location": location,
+                    "highlights": all_bullets[:3]
+                    or [f"Delivered measurable analytics and engineering outcomes using {', '.join(skills[:3])}."],
+                }
+            )
+            if len(experience) >= 4:
+                break
 
     if not experience:
-        bullets = [ln.lstrip("-*• ").strip() for ln in lines if ln.startswith(("-", "*", "•"))][:4]
         experience.append(
             {
                 "title": "Data & Analytics Specialist",
                 "company": "Enterprise Delivery",
                 "duration": "2021 - Present",
                 "location": location,
-                "highlights": bullets or [f"Applied {', '.join(skills[:4])} to drive business KPIs."],
+                "highlights": all_bullets[:4] or [f"Applied {', '.join(skills[:4])} to drive business KPIs."],
             }
         )
 
     education: List[Dict[str, Any]] = []
-    edu_match = re.search(
-        r"((?:B\.?Sc|M\.?Sc|B\.?A|M\.?A|Ph\.?D|Bachelor|Master)[^\n|—-]{2,60})(?:\s*(?:—|-|at|,)\s*([^\n|]{2,60}))?(?:\s*\|\s*(\d{4}))?",
-        text,
+    edu_line_re = re.compile(
+        r"\b((?:B\.?Sc\.?|M\.?Sc\.?|B\.?Eng\.?|M\.?Eng\.?|Ph\.?D\.?|Bachelor(?:'s)?|Master(?:'s)?|Doctorate|B\.A\.?|M\.A\.?)\b[^|\n—–]{1,65}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$",
         re.I,
     )
-    if edu_match:
-        education.append(
-            {
-                "degree": edu_match.group(1).strip(),
-                "institution": (edu_match.group(2) or "University").strip(),
-                "year": (edu_match.group(3) or "2020").strip(),
-                "details": "",
-            }
-        )
+    edu_abbrev_re = re.compile(
+        r"\b((?:BA|MA|BS|MS)\s+(?:in|of)\s+[^|\n—–]{2,55}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$"
+    )
+    for ln in lines:
+        ln_clean = re.sub(r"^(?:#+\s*|[-*•]\s*)", "", ln).replace("**", "").strip()
+        if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower():
+            continue
+        if any(bad in ln_clean.lower() for bad in ("summary", "master profile", "master resume")):
+            continue
+        # Guard against bare two-letter words like "ma" unless written "B.A."/"M.A." or uppercase BA/MA
+        edu_match = None
+        if re.search(r"\b(?:b\.?sc|m\.?sc|b\.?eng|m\.?eng|ph\.?d|bachelor|master|doctorate|b\.a\.|m\.a\.)\b", ln_clean, re.I):
+            edu_match = edu_line_re.search(ln_clean)
+        elif re.search(r"\b(?:BA|MA|BS|MS)\s+(?:in|of)\b", ln_clean):
+            edu_match = edu_abbrev_re.search(ln_clean)
+        if edu_match:
+            tail = (edu_match.group(3) or "").strip()
+            year_match = re.search(r"\b((?:19|20)\d{2})\b", tail or ln_clean)
+            education.append(
+                {
+                    "degree": edu_match.group(1).strip(" ,-|—–"),
+                    "institution": (edu_match.group(2) or "University").strip(" ,-|—–"),
+                    "year": year_match.group(1) if year_match else "2020",
+                    "details": "",
+                }
+            )
+            break
 
     profile_dict: Dict[str, Any] = {
         "full_name": full_name,

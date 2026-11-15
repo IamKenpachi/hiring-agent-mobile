@@ -9,6 +9,7 @@ import type {
   PlatformsResponse,
   Profile,
   ProfileCreatePayload,
+  ProfilePreviewResponse,
   ProfileUpdatePayload,
   RankedJob,
   ReviseOutputResponse,
@@ -199,6 +200,31 @@ export interface DocumentUploadAsset {
   file?: File | Blob;
 }
 
+async function buildResumeFormData(
+  asset: DocumentUploadAsset,
+  profileName?: string
+): Promise<FormData> {
+  const formData = new FormData();
+  if (Platform.OS === "web" && asset.file) {
+    formData.append("file", asset.file, asset.name || "resume.pdf");
+  } else if (Platform.OS === "web" && asset.uri) {
+    const blobResp = await fetch(asset.uri);
+    const blob = await blobResp.blob();
+    formData.append("file", blob, asset.name || "resume.pdf");
+  } else {
+    formData.append("file", {
+      uri: asset.uri,
+      name: asset.name || "resume.pdf",
+      type: asset.mimeType || "application/pdf",
+    } as unknown as Blob);
+  }
+
+  if (profileName?.trim()) {
+    formData.append("profile_name", profileName.trim());
+  }
+  return formData;
+}
+
 export const apiClient = {
   baseUrl: API_BASE_URL,
 
@@ -262,29 +288,25 @@ export const apiClient = {
     asset: DocumentUploadAsset,
     profileName?: string
   ): Promise<Profile> {
-    const formData = new FormData();
-    if (Platform.OS === "web" && asset.file) {
-      formData.append("file", asset.file, asset.name || "resume.pdf");
-    } else if (Platform.OS === "web" && asset.uri) {
-      const blobResp = await fetch(asset.uri);
-      const blob = await blobResp.blob();
-      formData.append("file", blob, asset.name || "resume.pdf");
-    } else {
-      formData.append("file", {
-        uri: asset.uri,
-        name: asset.name || "resume.pdf",
-        type: asset.mimeType || "application/pdf",
-      } as unknown as Blob);
-    }
-
-    if (profileName?.trim()) {
-      formData.append("profile_name", profileName.trim());
-    }
-
+    const formData = await buildResumeFormData(asset, profileName);
     return request<Profile>("/api/profiles/upload-pdf", {
       method: "POST",
       body: formData,
       isFormData: true,
+    });
+  },
+
+  async parseProfilePreview(
+    asset: DocumentUploadAsset,
+    profileName?: string,
+    overrides?: { geminiKey?: string; model?: string }
+  ): Promise<ProfilePreviewResponse> {
+    const formData = await buildResumeFormData(asset, profileName);
+    return request<ProfilePreviewResponse>("/api/profiles/parse-preview", {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+      overrides,
     });
   },
 

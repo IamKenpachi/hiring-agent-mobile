@@ -86,6 +86,11 @@ export type ProfileUpdatePayload = Partial<ProfileCreatePayload> & {
   raw_markdown?: string;
 };
 
+export interface ProfilePreviewResponse extends ProfileCreatePayload {
+  filename: string;
+  file_size_bytes: number;
+}
+
 export interface PlatformInfo {
   id: string;
   label: string;

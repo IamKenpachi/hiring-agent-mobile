@@ -1,6 +1,6 @@
 # Hiring Agent Mobile
 
-Cross-platform AI career command center built with **Expo (React Native + Expo Router + TypeScript)**, **FastAPI**, **Google ADK**, **python-jobspy**, **fpdf2**, and **Supabase** (with local SQLite fallback for offline/development runs).
+Cross-platform AI career command center built with **Expo (React Native + Expo Router + TypeScript + NativeWind v4)**, **FastAPI**, **Google ADK**, **python-jobspy**, **fpdf2**, and **Supabase** (with local SQLite fallback for offline/development runs).
 
 ---
 
@@ -9,11 +9,13 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 ```text
 +-------------------------------------------------------------------------+
 |                    EXPO CROSS-PLATFORM APP (mobile/)                    |
-|  iOS • Android • Web (Expo Router + Dark Executive Theme)               |
+|  iOS • Android • Web (Expo Router + NativeWind v4 + Dark Executive Theme)|
 |                                                                         |
-|  • (auth)/login       Email/Password Sign In & Sign Up                  |
-|  • (auth)/onboarding  Step 1: Gemini Key (SecureStore) + Model Picker   |
-|                       Step 2: PDF CV Upload OR Questionnaire Wizard     |
+|  • (auth)/welcome     Welcome Screen ("Get Started" / "Sign In")        |
+|  • (auth)/login       Email/Password Sign In & Onboarding Sign Up       |
+|  • (auth)/onboarding  Step 1: Gemini Key (SecureStore) + AI Engine Grid |
+|                       Step 2: Pre-Auth PDF CV Parser (4-Section Review) |
+|                               OR 4-Step Questionnaire Wizard            |
 |  • (tabs)/hunt        8-Board JobSpy Hunter + SSE Live Progress         |
 |  • job/[id]           4-Score Fit Audit + Skills + "Yes, Tailor" CTA    |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
@@ -29,7 +31,7 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |                      FASTAPI + GOOGLE ADK (backend/)                    |
 |                                                                         |
 |  • /api/auth          Signup, Login, /me, Gemini Key & Model validation |
-|  • /api/profiles      Multi-Profile CRUD + pypdf & ProfileParserAgent   |
+|  • /api/profiles      Multi-Profile CRUD + /parse-preview + ProfileParserAgent |
 |  • /api/hunt          8-Board JobSpy Scraper + SSE + JobMatcherAgent    |
 |  • /api/studio        JDExtractorAgent + ApplicationTailorPipeline      |
 |  • /api/outputs       Saved Outputs + RevisionCopilotAgent + fpdf2 PDFs |

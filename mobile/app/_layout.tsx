@@ -81,7 +81,7 @@ function AuthNavigationGuard() {
     const onWelcome = inAuthGroup && secondSegment === "welcome";
 
     if (!token) {
-      if (!onWelcome && !onLogin) {
+      if (!onWelcome && !onLogin && !onOnboarding) {
         router.replace("/(auth)/welcome");
       }
       return;

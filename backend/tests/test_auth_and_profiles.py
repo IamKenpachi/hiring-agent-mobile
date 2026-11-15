@@ -213,3 +213,37 @@ Senior Analytics Engineer with 6 years building dbt, Snowflake, SQL, and Python 
     assert telemetry["input_tokens"] > 0
     assert telemetry["output_tokens"] > 0
     assert telemetry["est_cost_usd"] > 0
+
+
+def test_parse_profile_preview_pre_auth(client: TestClient, tmp_path: Path) -> None:
+    resume_md = """# Karim Faiq
+London, UK | +44 7700 900111 | karim.faiq@example.com | linkedin.com/in/karimfaiq
+
+## PROFESSIONAL SUMMARY
+Senior Data Analyst building scalable dbt pipelines and executive KPI dashboards.
+
+## CORE TECHNICAL SKILLS
+Python, SQL, Snowflake, dbt, Tableau, Airflow
+
+## PROFESSIONAL EXPERIENCE
+**Senior Data Analyst** — FinTech Corp | 2023 - Present
+- Built 15+ dbt models in Snowflake reducing query latency by 40%.
+
+## EDUCATION
+**B.Sc. Computer Science** — University of London | 2020
+"""
+    pdf_path = tmp_path / "karim_cv.pdf"
+    generate_pdf_file(resume_md, str(pdf_path), doc_type="cv")
+    pdf_bytes = pdf_path.read_bytes()
+
+    preview_res = client.post(
+        "/api/profiles/parse-preview",
+        headers={"X-Gemini-Api-Key": "test-dummy-key-123456"},
+        files={"file": ("Karim_Data_Analyst_CV.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert preview_res.status_code == 200, preview_res.text
+    preview = preview_res.json()
+    assert preview["filename"] == "Karim_Data_Analyst_CV.pdf"
+    assert preview["file_size_bytes"] == len(pdf_bytes)
+    assert "karim.faiq@example.com" in preview["email"].lower()
+    assert len(preview["skills"]) >= 3

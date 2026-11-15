@@ -195,6 +195,46 @@ def create_profile(
     return _serialize_profile(prof)
 
 
+@router.post("/parse-preview")
+async def parse_profile_preview(
+    file: UploadFile = File(...),
+    profile_name: Optional[str] = Form(None),
+    gemini_api_key: str = Depends(get_gemini_api_key),
+    x_gemini_model: Optional[str] = Header(None, alias="X-Gemini-Model"),
+) -> Dict[str, Any]:
+    """Parse a PDF/Markdown/Text CV using X-Gemini-Api-Key without requiring an account or DB write."""
+    content = await file.read()
+    filename = file.filename or "resume.pdf"
+    raw_text = _extract_uploaded_resume_text(filename, content)
+    active_model = resolve_gemini_model(x_gemini_model)
+
+    parsed, _, _ = parse_profile_from_text(
+        raw_text=raw_text,
+        api_key=gemini_api_key,
+        model_name=active_model,
+    )
+    resolved_name = (profile_name or "").strip() or f"{parsed.get('full_name') or 'Imported'} CV"
+
+    return {
+        "filename": filename,
+        "file_size_bytes": len(content),
+        "profile_name": resolved_name,
+        "full_name": str(parsed.get("full_name") or "").strip(),
+        "email": str(parsed.get("email") or "").strip(),
+        "phone": str(parsed.get("phone") or "").strip(),
+        "location": str(parsed.get("location") or "").strip(),
+        "linkedin_url": str(parsed.get("linkedin_url") or "").strip(),
+        "github_url": str(parsed.get("github_url") or "").strip(),
+        "portfolio_url": str(parsed.get("portfolio_url") or "").strip(),
+        "summary": str(parsed.get("summary") or "").strip(),
+        "skills": parsed.get("skills") or [],
+        "experience": parsed.get("experience") or [],
+        "projects": parsed.get("projects") or [],
+        "education": parsed.get("education") or [],
+        "certifications": parsed.get("certifications") or [],
+    }
+
+
 @router.post("/upload-pdf", status_code=status.HTTP_201_CREATED)
 async def upload_profile_pdf(
     file: UploadFile = File(...),

@@ -5,36 +5,50 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Lock, Mail, Sparkles, User as UserIcon } from "lucide-react-native";
-import { COLORS } from "../../src/constants/theme";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react-native";
+import {
+  AuthButtonGradient,
+  AuthHeroBriefcase,
+  OnboardingScreenFrame,
+  WEB_SANS,
+} from "../../src/components/OnboardingGraphics";
 import { useAuth } from "../../src/context/AuthContext";
-import { API_BASE_URL, ApiError } from "../../src/lib/api";
+import { ApiError } from "../../src/lib/api";
 
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
-  const { signIn, signUp, backendHealthy, pingHealth } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">(
-    params.mode === "signup" ? "signup" : "signin"
-  );
+  const { signIn, signUp, signUpWithOnboarding, onboardingDraft } = useAuth();
 
-  useEffect(() => {
-    if (params.mode === "signup" || params.mode === "signin") {
-      setMode(params.mode);
-    }
-  }, [params.mode]);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">(
+    params.mode === "signup" || onboardingDraft ? "signup" : "signin"
+  );
+  const [email, setEmail] = useState(() => onboardingDraft?.email || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.mode === "signup") {
+      setMode("signup");
+    } else if (params.mode === "signin") {
+      setMode("signin");
+    }
+  }, [params.mode]);
+
+  useEffect(() => {
+    if (onboardingDraft?.email && !email) {
+      setEmail(onboardingDraft.email);
+    }
+  }, [onboardingDraft?.email, email]);
+
+  const isSignUpFlow = mode === "signup";
 
   const handleSubmit = async () => {
     setError(null);
@@ -42,17 +56,21 @@ export default function LoginScreen() {
       setError("Please enter both email and password.");
       return;
     }
-    if (mode === "signup" && password.length < 6) {
+    if (isSignUpFlow && password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
     try {
-      if (mode === "signin") {
-        await signIn(email, password);
+      if (isSignUpFlow) {
+        if (onboardingDraft) {
+          await signUpWithOnboarding(email, password, onboardingDraft);
+        } else {
+          await signUp(email, password);
+        }
       } else {
-        await signUp(email, password, fullName);
+        await signIn(email, password);
       }
     } catch (err) {
       const msg =
@@ -68,335 +86,150 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View className="px-5 pt-2 pb-1">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to Welcome"
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(auth)/welcome");
-            }
-          }}
-          className="self-start flex-row items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 active:bg-white/10"
-        >
-          <ArrowLeft size={14} color={COLORS.textSecondary} />
-          <Text className="text-xs font-semibold text-[#94A3B8]">Welcome</Text>
-        </Pressable>
-      </View>
-
+    <OnboardingScreenFrame strongGlow>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
+        className="flex-1"
       >
+        <View className="px-5 pt-3 pb-1">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace("/(auth)/welcome");
+              }
+            }}
+            className="h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] active:bg-white/10"
+          >
+            <ArrowLeft size={16} color="#CBD5E1" />
+          </Pressable>
+        </View>
+
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          className="flex-1"
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: 26,
+            paddingTop: 28,
+            paddingBottom: 30,
+          }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Executive Hero */}
-          <View style={styles.hero}>
-            <View style={styles.logoBadge}>
-              <Sparkles size={24} color="#FFFFFF" />
+          {/* Glowing Hero */}
+          <View className="items-center mt-2">
+            <View className="mb-4">
+              <AuthHeroBriefcase size={88} />
             </View>
-            <Text style={styles.brand}>Hiring Agent Mobile</Text>
-            <Text style={styles.tagline}>
-              Multi-Agent JobSpy Hunter, ATS Optimizer & Executive Revision Studio
+            <Text
+              style={WEB_SANS}
+              className="text-center text-[28px] font-bold tracking-[-0.6px] text-white"
+            >
+              Hiring Agent AI
             </Text>
-
-            <Pressable onPress={() => void pingHealth()} style={styles.healthPill}>
-              <View
-                style={[
-                  styles.healthDot,
-                  {
-                    backgroundColor:
-                      backendHealthy === true
-                        ? COLORS.emerald
-                        : backendHealthy === false
-                          ? COLORS.rose
-                          : COLORS.amber,
-                  },
-                ]}
-              />
-              <Text style={styles.healthText}>
-                {backendHealthy === true
-                  ? "API Connected"
-                  : backendHealthy === false
-                    ? `API Unreachable (${API_BASE_URL})`
-                    : "Checking API..."}
-              </Text>
-            </Pressable>
+            <Text
+              style={WEB_SANS}
+              className="mt-1.5 text-center text-[13px] font-normal text-[#94A3B8]"
+            >
+              {isSignUpFlow
+                ? "Create your account to save your master profile."
+                : "Hunt Smarter. Tailor Instantly. Land Offers."}
+            </Text>
           </View>
 
-          {/* Auth Card */}
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <Pressable
-                onPress={() => {
-                  setMode("signin");
-                  setError(null);
-                }}
-                style={[styles.toggleBtn, mode === "signin" && styles.toggleActive]}
-              >
-                <Text
-                  style={[
-                    styles.toggleText,
-                    mode === "signin" && styles.toggleTextActive,
-                  ]}
-                >
-                  Sign In
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMode("signup");
-                  setError(null);
-                }}
-                style={[styles.toggleBtn, mode === "signup" && styles.toggleActive]}
-              >
-                <Text
-                  style={[
-                    styles.toggleText,
-                    mode === "signup" && styles.toggleTextActive,
-                  ]}
-                >
-                  Create Account
-                </Text>
-              </Pressable>
-            </View>
-
+          {/* Clean Email + Password Form (without Sign In / Sign Up pills on top) */}
+          <View className="mt-10 gap-4">
             {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+              <View className="rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5">
+                <Text className="text-xs font-medium text-red-200">{error}</Text>
               </View>
             ) : null}
 
-            {mode === "signup" ? (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Full Name (Optional)</Text>
-                <View style={styles.inputRow}>
-                  <UserIcon size={16} color={COLORS.textMuted} />
-                  <TextInput
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Alex Rivera"
-                    placeholderTextColor={COLORS.textMuted}
-                    style={styles.input}
-                  />
-                </View>
-              </View>
-            ) : null}
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputRow}>
-                <Mail size={16} color={COLORS.textMuted} />
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@example.com"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.input}
-                />
-              </View>
+            <View>
+              <Text style={WEB_SANS} className="text-[12.5px] font-medium text-[#CBD5E1] mb-1.5">
+                Email
+              </Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                placeholderTextColor="#475569"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="h-[46px] rounded-xl border border-[#4E568A] bg-[#0D1120] px-3.5 text-[14px] text-white"
+              />
             </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
-                <Lock size={16} color={COLORS.textMuted} />
+            <View>
+              <Text style={WEB_SANS} className="text-[12.5px] font-medium text-[#CBD5E1] mb-1.5">
+                Password
+              </Text>
+              <View className="h-[46px] flex-row items-center rounded-xl border border-white/15 bg-[#0D1120] px-3.5">
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••"
-                  placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry
+                  placeholderTextColor="#475569"
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  style={styles.input}
+                  className="flex-1 text-[14px] text-white"
                 />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  className="pl-2 py-1"
+                >
+                  {showPassword ? (
+                    <EyeOff size={17} color="#64748B" />
+                  ) : (
+                    <Eye size={17} color="#64748B" />
+                  )}
+                </Pressable>
               </View>
             </View>
 
             <Pressable
-              onPress={handleSubmit}
+              accessibilityRole="button"
+              accessibilityLabel={isSignUpFlow ? "Create Account & Start Hunting" : "Sign In"}
               disabled={loading}
-              style={({ pressed }) => [
-                styles.submitBtn,
-                loading && styles.submitDisabled,
-                pressed && { opacity: 0.9 },
-              ]}
+              onPress={() => void handleSubmit()}
+              className="mt-3 h-[50px] w-full flex-row items-center justify-center gap-2 overflow-hidden rounded-full active:opacity-90"
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : null}
-              <Text style={styles.submitText}>
+              <AuthButtonGradient />
+              {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
+              <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
                 {loading
                   ? "Authenticating..."
-                  : mode === "signin"
-                    ? "Sign In to Command Center"
-                    : "Create Account & Continue"}
+                  : isSignUpFlow
+                    ? "Create Account & Start Hunting"
+                    : "Sign In"}
               </Text>
             </Pressable>
           </View>
+
+          <View className="mt-auto pt-8 items-center">
+            {isSignUpFlow ? (
+              <Pressable onPress={() => setMode("signin")} className="py-2">
+                <Text style={WEB_SANS} className="text-[12.5px] text-[#94A3B8]">
+                  Already have an account?{" "}
+                  <Text className="font-semibold text-[#A5B4FC]">Sign In</Text>
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable onPress={() => router.replace("/(auth)/onboarding")} className="py-2">
+                <Text style={WEB_SANS} className="text-[12.5px] text-[#94A3B8]">
+                  New to Hiring Agent AI?{" "}
+                  <Text className="font-semibold text-[#A5B4FC]">Get Started</Text>
+                </Text>
+              </Pressable>
+            )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </OnboardingScreenFrame>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-    gap: 24,
-  },
-  hero: {
-    alignItems: "center",
-    gap: 10,
-  },
-  logoBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: COLORS.indigo,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: COLORS.indigo,
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-  },
-  brand: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    letterSpacing: -0.3,
-  },
-  tagline: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 19,
-    maxWidth: 320,
-  },
-  healthPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  healthDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  healthText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 18,
-    gap: 14,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 9,
-    alignItems: "center",
-  },
-  toggleActive: {
-    backgroundColor: COLORS.indigo,
-  },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  toggleTextActive: {
-    color: "#FFFFFF",
-  },
-  errorBox: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  errorText: {
-    color: "#FDA4AF",
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-  },
-  input: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: COLORS.textPrimary,
-  },
-  submitBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: COLORS.indigo,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  submitDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-});
-
