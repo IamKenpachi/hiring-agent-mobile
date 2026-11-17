@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -110,6 +111,61 @@ def _strip_nul_bytes(value: Any) -> Any:
     return value
 
 
+_PDF_LIGATURE_MAP: Dict[str, str] = {
+    "\ufb00": "ff",
+    "\ufb01": "fi",
+    "\ufb02": "fl",
+    "\ufb03": "ffi",
+    "\ufb04": "ffl",
+    "\ufb06": "st",
+}
+
+_BROKEN_LIGATURE_WORDS: Dict[str, str] = {
+    "nancial": "financial",
+    "nancially": "financially",
+    "eciency": "efficiency",
+    "ecient": "efficient",
+    "eciently": "efficiently",
+    "prociency": "proficiency",
+    "procient": "proficient",
+    "specic": "specific",
+    "specically": "specifically",
+    "signicant": "significant",
+    "signicantly": "significantly",
+    "workow": "workflow",
+    "workows": "workflows",
+    "certication": "certification",
+    "certications": "certifications",
+    "qualications": "qualifications",
+}
+
+_BROKEN_LIGATURE_RE = re.compile(
+    r"\b(" + "|".join(_BROKEN_LIGATURE_WORDS.keys()) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _normalize_pdf_ligatures(text: str) -> str:
+    """Restore Unicode ligature glyphs and common broken pypdf fi/fl/ffi words."""
+    if not text:
+        return ""
+    cleaned = text
+    for glyph, replacement in _PDF_LIGATURE_MAP.items():
+        if glyph in cleaned:
+            cleaned = cleaned.replace(glyph, replacement)
+
+    def _restore_word(match: re.Match[str]) -> str:
+        word = match.group(0)
+        fixed = _BROKEN_LIGATURE_WORDS[word.lower()]
+        if word.isupper():
+            return fixed.upper()
+        if word[0].isupper():
+            return fixed.capitalize()
+        return fixed
+
+    return _BROKEN_LIGATURE_RE.sub(_restore_word, cleaned)
+
+
 def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
     """Extract readable text from an uploaded PDF, Markdown, or plain-text resume."""
     if not content:
@@ -121,7 +177,8 @@ def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
         try:
             reader = PdfReader(io.BytesIO(content))
             pages = [page.extract_text() or "" for page in reader.pages]
-            extracted = _strip_nul_bytes("\n".join(pages)).strip()
+            normalized = _normalize_pdf_ligatures("\n".join(pages))
+            extracted = _normalize_pdf_ligatures(_strip_nul_bytes(normalized)).strip()
             if extracted:
                 return extracted
         except Exception as exc:
@@ -136,7 +193,7 @@ def _extract_uploaded_resume_text(filename: str, content: bytes) -> str:
         decoded = content.decode("utf-8")
     except UnicodeDecodeError:
         decoded = content.decode("latin-1", errors="ignore")
-    decoded = _strip_nul_bytes(decoded).strip()
+    decoded = _normalize_pdf_ligatures(_strip_nul_bytes(_normalize_pdf_ligatures(decoded))).strip()
 
     if not decoded:
         raise HTTPException(

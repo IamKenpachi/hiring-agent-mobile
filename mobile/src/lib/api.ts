@@ -166,6 +166,33 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function createAbortError(err?: unknown): Error {
+  if (err instanceof Error && err.name === "AbortError") {
+    return err;
+  }
+  const msg =
+    err instanceof Error && err.message
+      ? err.message
+      : typeof err === "object" &&
+          err !== null &&
+          "message" in err &&
+          typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : "Request aborted";
+  const abortErr = new Error(msg);
+  abortErr.name = "AbortError";
+  return abortErr;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "name" in err &&
+    (err as { name?: unknown }).name === "AbortError"
+  );
+}
+
 async function request<T>(
   path: string,
   options: {
@@ -174,10 +201,24 @@ async function request<T>(
     headers?: Record<string, string>;
     isFormData?: boolean;
     overrides?: { geminiKey?: string; model?: string };
+    signal?: AbortSignal;
   } = {}
 ): Promise<T> {
-  const { method = "GET", body, headers = {}, isFormData = false, overrides } = options;
+  const {
+    method = "GET",
+    body,
+    headers = {},
+    isFormData = false,
+    overrides,
+    signal,
+  } = options;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   const authHeaders = await buildAuthHeaders(overrides, !isFormData);
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
   let res: Response;
@@ -193,8 +234,12 @@ async function request<T>(
         : body !== undefined
           ? JSON.stringify(body)
           : undefined,
+      ...(signal ? { signal } : {}),
     });
   } catch (err) {
+    if (signal?.aborted || isAbortError(err)) {
+      throw createAbortError(err);
+    }
     const msg = err instanceof Error ? err.message : "Network request failed";
     throw new ApiError(`${msg} (${url})`, 0);
   }
@@ -204,16 +249,26 @@ async function request<T>(
   if (contentType.includes("application/json")) {
     try {
       parsed = await res.json();
-    } catch {
+    } catch (err) {
+      if (signal?.aborted || isAbortError(err)) {
+        throw createAbortError(err);
+      }
       parsed = null;
     }
   } else {
     try {
       const text = await res.text();
       parsed = text ? { detail: text } : null;
-    } catch {
+    } catch (err) {
+      if (signal?.aborted || isAbortError(err)) {
+        throw createAbortError(err);
+      }
       parsed = null;
     }
+  }
+
+  if (signal?.aborted) {
+    throw createAbortError();
   }
 
   if (!res.ok) {
@@ -528,13 +583,15 @@ export const apiClient = {
 
   async tailorJob(
     jobId: string,
-    payload: { tone?: string; custom_capabilities?: string; model?: string } = {}
+    payload: { tone?: string; custom_capabilities?: string; model?: string } = {},
+    options?: { signal?: AbortSignal }
   ): Promise<TailoredOutput> {
     return request<TailoredOutput>(
       `/api/hunt/jobs/${encodeURIComponent(jobId)}/tailor`,
       {
         method: "POST",
         body: payload,
+        signal: options?.signal,
       }
     );
   },
@@ -550,10 +607,14 @@ export const apiClient = {
     });
   },
 
-  async tailorStudio(payload: StudioTailorPayload): Promise<TailoredOutput> {
+  async tailorStudio(
+    payload: StudioTailorPayload,
+    options?: { signal?: AbortSignal }
+  ): Promise<TailoredOutput> {
     return request<TailoredOutput>("/api/studio/tailor", {
       method: "POST",
       body: payload,
+      signal: options?.signal,
     });
   },
 
@@ -564,6 +625,13 @@ export const apiClient = {
 
   async getOutputDetail(outputId: string): Promise<TailoredOutput> {
     return request<TailoredOutput>(`/api/outputs/${encodeURIComponent(outputId)}`);
+  },
+
+  async deleteOutput(outputId: string): Promise<{ deleted?: boolean; id?: string }> {
+    return request<{ deleted?: boolean; id?: string }>(
+      `/api/outputs/${encodeURIComponent(outputId)}`,
+      { method: "DELETE" }
+    );
   },
 
   async reviseOutput(

@@ -1,15 +1,20 @@
-"""Executive Modern A4 HTML preview and FPDF2 PDF generation service."""
+"""Executive Modern A4 HTML preview and Playwright Chromium / FPDF2 PDF generation service."""
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import html
+import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+
+logger = logging.getLogger(__name__)
 
 SVG_ICONS: Dict[str, str] = {
     "location": (
@@ -49,6 +54,12 @@ SVG_ICONS: Dict[str, str] = {
     ),
 }
 
+_GOOGLE_FONTS_LINKS = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+    '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">'
+)
+
 _LATIN1_REPLACEMENTS = str.maketrans(
     {
         "\u2014": "--",  # em dash
@@ -68,8 +79,9 @@ _LATIN1_REPLACEMENTS = str.maketrans(
 
 def _escape_and_bold(text: str) -> str:
     """Escape HTML entities before converting markdown **bold** to <strong>."""
-    escaped = html.escape(text, quote=True)
-    return re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = html.escape(text or "", quote=True)
+    bolded = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", escaped)
+    return bolded.replace("**", "")
 
 
 def _sanitize_pdf_text(text: str) -> str:
@@ -79,7 +91,33 @@ def _sanitize_pdf_text(text: str) -> str:
 
 
 def _strip_markdown_markers(text: str) -> str:
-    return re.sub(r"\*\*(.*?)\*\*", r"\1", text).replace("`", "").strip()
+    """Strip paired **bold**, unmatched ** markers, and backticks from text."""
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", text or "")
+    return cleaned.replace("**", "").replace("`", "").strip()
+
+
+def _is_entry_header(clean: str, is_prose_section: bool = False) -> bool:
+    """Return True when a non-bullet line represents a role, project, or education header."""
+    if not clean or clean.startswith(("- ", "* ", "• ")):
+        return False
+    if clean.startswith("### "):
+        return True
+    if is_prose_section:
+        return False
+    if clean.startswith("**"):
+        return True
+    return ("—" in clean or " -- " in clean) and ("|" in clean or "20" in clean or "19" in clean)
+
+
+def _parse_entry_header(clean: str) -> Tuple[str, str]:
+    """Split an entry header line into (main_part, date_part) with stray markers removed."""
+    raw_title = clean[4:].strip() if clean.startswith("### ") else clean
+    title_clean = _strip_markdown_markers(raw_title)
+    for sep in (" | ", " |", "|"):
+        if sep in title_clean:
+            main_part, date_part = [p.strip() for p in title_clean.rsplit(sep, 1)]
+            return main_part, date_part
+    return title_clean, ""
 
 
 def _cv_json_to_markdown(cv_json: Dict[str, Any]) -> str:
@@ -133,7 +171,10 @@ def _cv_json_to_markdown(cv_json: Dict[str, Any]) -> str:
                 continue
             role = str(entry.get("title") or entry.get("role") or entry.get("degree") or entry.get("name") or "").strip()
             org = str(entry.get("company") or entry.get("institution") or entry.get("organization") or "").strip()
-            dates = str(entry.get("dates") or entry.get("date") or entry.get("period") or "").strip()
+            if not org and entry.get("technologies"):
+                techs = entry.get("technologies")
+                org = ", ".join(str(t) for t in techs) if isinstance(techs, list) else str(techs)
+            dates = str(entry.get("dates") or entry.get("date") or entry.get("period") or entry.get("year") or "").strip()
             header = f"**{role}**" if role else "**Role**"
             if org:
                 header += f" — {org}"
@@ -181,7 +222,7 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
             continue
 
         if clean.startswith("# ") and not clean.startswith("## "):
-            name = clean[2:].strip()
+            name = _strip_markdown_markers(clean[2:])
             i += 1
             while i < len(lines):
                 c_line = lines[i].strip()
@@ -195,9 +236,11 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
             continue
 
         if clean.startswith("## "):
-            sec_title = clean[3:].strip().upper()
+            sec_title = _strip_markdown_markers(clean[3:]).upper()
+            is_prose = any(k in sec_title for k in ("SUMMARY", "PROFILE", "OBJECTIVE"))
             current_section = {
                 "title": sec_title,
+                "is_prose_section": is_prose,
                 "items": [],
             }
             sections.append(current_section)
@@ -205,29 +248,22 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
             continue
 
         if current_section is None:
-            current_section = {"title": "SUMMARY", "items": []}
+            current_section = {"title": "SUMMARY", "is_prose_section": False, "items": []}
             sections.append(current_section)
 
         if clean.startswith("|"):
             cells = [c.strip() for c in clean.split("|") if c.strip()]
             if cells and not all(
-                c.replace("-", "").replace(":", "") == "" or c.lower() in {"category", "tools", "skills", "tools/skills"}
+                c.replace("-", "").replace(":", "") == ""
+                or _strip_markdown_markers(c).lower() in {"category", "tools", "skills", "tools/skills"}
                 for c in cells
             ):
                 current_section["items"].append({"type": "table_row", "cells": cells})
             i += 1
             continue
 
-        if clean.startswith("### ") or clean.startswith("**") or ("—" in clean and ("|" in clean or "20" in clean)):
-            title_clean = clean[4:].strip() if clean.startswith("### ") else clean
-            title_clean = title_clean.replace("**", "")
-            date_part = ""
-            main_part = title_clean
-            if " | " in title_clean:
-                main_part, date_part = [p.strip() for p in title_clean.rsplit(" | ", 1)]
-            elif " |" in title_clean:
-                main_part, date_part = [p.strip() for p in title_clean.rsplit(" |", 1)]
-
+        if _is_entry_header(clean, is_prose_section=bool(current_section.get("is_prose_section"))):
+            main_part, date_part = _parse_entry_header(clean)
             current_section["items"].append(
                 {
                     "type": "entry",
@@ -252,7 +288,10 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
         i += 1
 
     contact_html_items: List[str] = []
-    for cp in contact_parts:
+    for raw_cp in contact_parts:
+        cp = _strip_markdown_markers(raw_cp)
+        if not cp:
+            continue
         cp_lower = cp.lower()
         safe_cp = html.escape(cp, quote=True)
         if "@" in cp:
@@ -271,13 +310,16 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
             contact_html_items.append(
                 f'<span class="contact-item">{SVG_ICONS["github"]}<a href="{url}" target="_blank">{display}</a></span>'
             )
-        elif any(c.isdigit() for c in cp) and len(cp) >= 7 and ("+" in cp or "-" in cp or cp.startswith("0")):
+        elif any(c.isdigit() for c in cp) and (
+            (len(cp) >= 7 and ("+" in cp or "-" in cp or cp.startswith("0") or "(" in cp))
+            or (sum(c.isdigit() for c in cp) >= 7 and not any(c.isalpha() for c in cp))
+        ):
             contact_html_items.append(f'<span class="contact-item">{SVG_ICONS["phone"]}{safe_cp}</span>')
         else:
             contact_html_items.append(f'<span class="contact-item">{SVG_ICONS["location"]}{safe_cp}</span>')
 
     contact_bar = (
-        '<div class="contact-bar">' + ' <span class="dot">&bull;</span> '.join(contact_html_items) + "</div>"
+        '<div class="contact-bar">' + ' <span class="dot">•</span> '.join(contact_html_items) + "</div>"
         if contact_html_items
         else ""
     )
@@ -295,13 +337,14 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
             for tr in table_rows:
                 cells = tr["cells"]
                 if len(cells) >= 2:
-                    cat = html.escape(cells[0].replace("**", ""))
-                    tools = html.escape(cells[1].replace("**", ""))
+                    cat = html.escape(_strip_markdown_markers(cells[0]))
+                    tools = html.escape(_strip_markdown_markers(cells[1]))
                     body_html.append(f'<div class="skill-category">{cat}</div>')
                     body_html.append(f'<div class="skill-tools">{tools}</div>')
                 elif len(cells) == 1:
                     body_html.append(
-                        f'<div class="skill-category" style="grid-column: span 2;">{html.escape(cells[0])}</div>'
+                        f'<div class="skill-category" style="grid-column: span 2;">'
+                        f'{html.escape(_strip_markdown_markers(cells[0]))}</div>'
                     )
             body_html.append("</div>")
 
@@ -334,53 +377,81 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{html.escape(display_name)} - Executive Resume</title>
+<title>{html.escape(display_name)} - Resume</title>
+{_GOOGLE_FONTS_LINKS}
 <style>
   @page {{
     size: A4 portrait;
     margin: 12mm 15mm;
   }}
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  * {{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }}
   body {{
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #1e293b;
     background: #ffffff;
-    font-size: 9.5pt;
+    font-size: 9.2pt;
     line-height: 1.45;
-    padding: 18px 20px;
     -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }}
-  .cv-container {{ max-width: 794px; margin: 0 auto; }}
+  .cv-container {{
+    max-width: 100%;
+    margin: 0 auto;
+  }}
+  @media screen {{
+    body {{
+      padding: 18px 20px;
+    }}
+    .cv-container {{
+      max-width: 794px;
+    }}
+  }}
   .header-block {{
     text-align: center;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     padding-bottom: 10px;
     border-bottom: 2px solid #2563eb;
   }}
   .candidate-name {{
-    font-size: 19pt;
+    font-size: 20pt;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     color: #0f172a;
     text-transform: uppercase;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
   }}
   .contact-bar {{
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 6px 10px;
-    font-size: 8.5pt;
+    gap: 8px;
+    font-size: 8.8pt;
     color: #475569;
     font-weight: 500;
   }}
-  .contact-item {{ display: inline-flex; align-items: center; }}
-  .contact-item a {{ color: #475569; text-decoration: none; }}
-  .dot {{ color: #94a3b8; font-size: 8pt; }}
-  .section-block {{ margin-bottom: 11px; }}
+  .contact-item {{
+    display: inline-flex;
+    align-items: center;
+  }}
+  .contact-item a {{
+    color: #475569;
+    text-decoration: none;
+  }}
+  .dot {{
+    color: #94a3b8;
+    font-size: 8pt;
+  }}
+  .section-block {{
+    margin-bottom: 10px;
+  }}
   .section-title {{
-    font-size: 9.6pt;
+    font-size: 9.8pt;
     font-weight: 700;
     color: #0f172a;
     text-transform: uppercase;
@@ -388,41 +459,64 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
     border-bottom: 1px solid #cbd5e1;
     padding-bottom: 2px;
     margin-bottom: 6px;
-    margin-top: 8px;
+    margin-top: 10px;
   }}
   .section-text {{
     font-size: 9pt;
     color: #334155;
     line-height: 1.45;
     margin-bottom: 4px;
+    text-align: justify;
   }}
   .skills-grid {{
     display: grid;
-    grid-template-columns: 165px 1fr;
-    gap: 4px 12px;
+    grid-template-columns: 180px 1fr;
+    gap: 3px 14px;
     font-size: 8.8pt;
     margin-bottom: 4px;
   }}
-  .skill-category {{ font-weight: 600; color: #1e293b; }}
-  .skill-tools {{ color: #334155; word-break: break-word; line-height: 1.35; }}
-  .entry-block {{ margin-bottom: 8px; }}
+  .skill-category {{
+    font-weight: 600;
+    color: #1e293b;
+  }}
+  .skill-tools {{
+    color: #334155;
+    word-break: break-word;
+    line-height: 1.35;
+  }}
+  .entry-block {{
+    margin-bottom: 8px;
+  }}
   .entry-header {{
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    flex-wrap: wrap;
-    gap: 4px;
     margin-bottom: 2px;
   }}
-  .entry-title {{ font-size: 9.3pt; font-weight: 700; color: #0f172a; }}
-  .entry-date {{ font-size: 8.4pt; font-weight: 500; color: #64748b; white-space: nowrap; }}
-  .bullet-list {{ list-style-type: none; padding-left: 14px; margin-top: 2px; }}
+  .entry-title {{
+    font-size: 9.4pt;
+    font-weight: 700;
+    color: #0f172a;
+  }}
+  .entry-date {{
+    font-size: 8.6pt;
+    font-weight: 500;
+    color: #64748b;
+    white-space: nowrap;
+    margin-left: 10px;
+  }}
+  .bullet-list {{
+    list-style-type: none;
+    padding-left: 14px;
+    margin-top: 2px;
+  }}
   .bullet-list li {{
     position: relative;
     font-size: 8.8pt;
     color: #334155;
     line-height: 1.4;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
+    text-align: justify;
   }}
   .bullet-list li::before {{
     content: "\\2022";
@@ -431,9 +525,16 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
     top: 0;
     color: #2563eb;
     font-weight: bold;
+    font-size: 10pt;
   }}
-  .bullet-list strong {{ color: #0f172a; font-weight: 600; }}
-  .avoid-break {{ break-inside: avoid; page-break-inside: avoid; }}
+  .bullet-list strong {{
+    color: #0f172a;
+    font-weight: 600;
+  }}
+  .avoid-break {{
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }}
 </style>
 </head>
 <body>
@@ -448,11 +549,35 @@ def render_cv_html(cv_markdown: str, cv_json: Optional[Dict[str, Any]] = None) -
 </html>"""
 
 
+def _looks_like_sender_name_line(clean: str) -> bool:
+    """Return True when the first line of a cover letter is a candidate name without '# '."""
+    plain = _strip_markdown_markers(clean)
+    if not plain:
+        return False
+    if (
+        clean.startswith("## ")
+        or clean.startswith("**Re:")
+        or clean.startswith("Re:")
+        or clean.startswith("Dear ")
+        or clean.startswith("Sincerely,")
+        or clean.startswith("Best regards,")
+        or clean.startswith("- ")
+        or clean.startswith("* ")
+        or clean.startswith("• ")
+    ):
+        return False
+    if len(plain) > 70 or (len(plain.split()) > 6 and plain.endswith(".")):
+        return False
+    return True
+
+
 def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str = "") -> str:
     """Render a tailored Cover Letter Markdown string into Executive Modern A4 letterhead HTML."""
     lines = (cl_markdown or "").strip().split("\n")
     formatted_body: List[str] = []
     has_subject = False
+    has_sender_name = False
+    is_first_line = True
 
     for raw_line in lines:
         c = raw_line.strip()
@@ -460,25 +585,38 @@ def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str
             continue
         if c.startswith("#") and "AGENT INSTRUCTION" in c:
             continue
+
+        if is_first_line:
+            is_first_line = False
+            if c.startswith("# ") and not c.startswith("## "):
+                has_sender_name = True
+                formatted_body.append(f'<h1 class="sender-name">{html.escape(_strip_markdown_markers(c[2:]))}</h1>')
+                continue
+            if _looks_like_sender_name_line(c):
+                has_sender_name = True
+                formatted_body.append(f'<h1 class="sender-name">{html.escape(_strip_markdown_markers(c))}</h1>')
+                continue
+
         if c.startswith("# ") and not c.startswith("## "):
-            formatted_body.append(f'<h1 class="sender-name">{html.escape(c[2:].strip())}</h1>')
+            formatted_body.append(f'<h1 class="sender-name">{html.escape(_strip_markdown_markers(c[2:]))}</h1>')
         elif c.startswith("## "):
-            formatted_body.append(f'<h2 class="section-sub">{html.escape(c[3:].strip())}</h2>')
+            formatted_body.append(f'<h2 class="section-sub">{html.escape(_strip_markdown_markers(c[3:]))}</h2>')
         elif c.startswith("**Re:") or c.startswith("Re:"):
             has_subject = True
-            clean_re = c.replace("**", "")
+            clean_re = _strip_markdown_markers(c)
             formatted_body.append(f'<div class="subject-line"><strong>{html.escape(clean_re)}</strong></div>')
         elif c.startswith("Dear ") or c.startswith("Sincerely,") or c.startswith("Best regards,"):
-            formatted_body.append(f'<p class="salutation"><strong>{html.escape(c)}</strong></p>')
+            formatted_body.append(f'<p class="salutation"><strong>{html.escape(_strip_markdown_markers(c))}</strong></p>')
         elif c.startswith("- ") or c.startswith("* "):
             formatted_body.append(f'<ul class="letter-list"><li>{_escape_and_bold(c[2:].strip())}</li></ul>')
         else:
             formatted_body.append(f'<p class="letter-para">{_escape_and_bold(c)}</p>')
 
-    subject_banner = ""
     if not has_subject and (job_title or company):
         role_desc = " at ".join(part for part in (job_title.strip(), company.strip()) if part)
-        subject_banner = f'<div class="subject-line"><strong>Re: Application for {html.escape(role_desc)}</strong></div>'
+        subject_html = f'<div class="subject-line"><strong>Re: Application for {html.escape(role_desc)}</strong></div>'
+        insert_idx = 1 if has_sender_name and formatted_body else 0
+        formatted_body.insert(insert_idx, subject_html)
 
     if not formatted_body:
         formatted_body.append('<p class="letter-para">Cover letter content pending generation.</p>')
@@ -489,6 +627,7 @@ def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cover Letter - {html.escape(job_title or "Application")}</title>
+{_GOOGLE_FONTS_LINKS}
 <style>
   @page {{
     size: A4 portrait;
@@ -501,9 +640,15 @@ def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str
     background: #ffffff;
     font-size: 10pt;
     line-height: 1.6;
-    padding: 24px 26px;
-    max-width: 794px;
-    margin: 0 auto;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }}
+  @media screen {{
+    body {{
+      padding: 24px 26px;
+      max-width: 794px;
+      margin: 0 auto;
+    }}
   }}
   .sender-name {{
     font-size: 16pt;
@@ -513,7 +658,7 @@ def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str
     letter-spacing: 0.05em;
     border-bottom: 2px solid #2563eb;
     padding-bottom: 6px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
   }}
   .section-sub {{
     font-size: 11pt;
@@ -522,24 +667,80 @@ def render_cover_letter_html(cl_markdown: str, job_title: str = "", company: str
     margin: 12px 0 6px;
   }}
   .subject-line {{
-    margin: 14px 0;
-    padding: 8px 12px;
-    background: #f8fafc;
-    border-left: 3px solid #2563eb;
-    font-size: 10.2pt;
+    margin: 18px 0;
+    font-size: 10.5pt;
     color: #0f172a;
   }}
-  .salutation {{ margin: 14px 0 10px 0; color: #0f172a; }}
-  .letter-para {{ margin-bottom: 12px; color: #334155; }}
+  .salutation {{
+    margin: 14px 0 10px 0;
+    color: #0f172a;
+  }}
+  .letter-para {{
+    margin-bottom: 12px;
+    color: #334155;
+    text-align: justify;
+  }}
   .letter-list {{ margin: 6px 0 10px 18px; color: #334155; }}
   .letter-list li {{ margin-bottom: 4px; }}
 </style>
 </head>
 <body>
-  {subject_banner}
   {"".join(formatted_body)}
 </body>
 </html>"""
+
+
+def _run_playwright_pdf(html_content: str, output_path: str, is_cover_letter: bool) -> bool:
+    """Render HTML into a vector A4 PDF synchronously using Playwright Chromium."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright
+
+    margins = (
+        {"top": "16mm", "bottom": "16mm", "left": "18mm", "right": "18mm"}
+        if is_cover_letter
+        else {"top": "10mm", "bottom": "10mm", "left": "12mm", "right": "12mm"}
+    )
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            try:
+                page.set_content(html_content, wait_until="networkidle", timeout=10000)
+            except PlaywrightTimeoutError:
+                logger.warning("Playwright networkidle timed out; retrying with load event.")
+                page.set_content(html_content, wait_until="load", timeout=10000)
+            page.pdf(
+                path=output_path,
+                format="A4",
+                print_background=True,
+                margin=margins,
+            )
+        finally:
+            browser.close()
+
+    out_file = Path(output_path)
+    return out_file.exists() and out_file.stat().st_size > 0
+
+
+def _export_html_via_playwright(
+    html_content: str,
+    output_path: str,
+    is_cover_letter: bool,
+) -> bool:
+    """Export HTML via Playwright Chromium, using a worker thread if an asyncio loop is active."""
+    try:
+        asyncio.get_running_loop()
+        has_running_loop = True
+    except RuntimeError:
+        has_running_loop = False
+
+    if has_running_loop:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run_playwright_pdf, html_content, output_path, is_cover_letter)
+            return future.result()
+
+    return _run_playwright_pdf(html_content, output_path, is_cover_letter)
 
 
 class _ExecutivePDF(FPDF):
@@ -552,31 +753,40 @@ class _ExecutivePDF(FPDF):
         self.cell(0, 8, f"Page {self.page_no()}", align="R")
 
 
-def generate_pdf_file(
+def _generate_fpdf2_fallback(
     markdown_text: str,
-    output_path: str,
+    target_path: Path,
+    *,
     doc_type: str = "cv",
     title: str = "",
 ) -> str:
-    """
-    Render Markdown CV or Cover Letter text into a valid A4 PDF file using fpdf2.
-    Creates parent directories if needed and returns output_path.
-    """
-    target_path = Path(output_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-
+    """Secondary A4 PDF generator using fpdf2 when Playwright Chromium is unavailable."""
     pdf = _ExecutivePDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
-    margin_x = 15 if doc_type == "cv" else 20
+    is_cover_letter = (doc_type or "").strip().lower() in {"cover_letter", "cl", "letter"}
+    margin_x = 20 if is_cover_letter else 15
     pdf.set_margins(margin_x, 15, margin_x)
     pdf.add_page()
 
     usable_w = pdf.w - 2 * margin_x
     lines = (markdown_text or "").strip().split("\n")
-    is_cover_letter = (doc_type or "").lower() in {"cover_letter", "cl", "letter"}
 
     rendered_any = False
-    if title and is_cover_letter and not any(line.strip().startswith("# ") for line in lines[:3]):
+    first_non_empty = next(
+        (
+            line.strip()
+            for line in lines
+            if line.strip()
+            and not line.strip().startswith("<!--")
+            and not (line.strip().startswith("---") and len(line.strip()) == 3)
+            and not (line.strip().startswith("#") and "AGENT INSTRUCTION" in line.strip())
+        ),
+        "",
+    )
+    has_top_name = first_non_empty.startswith("# ") or (
+        is_cover_letter and _looks_like_sender_name_line(first_non_empty)
+    )
+    if title and is_cover_letter and not has_top_name:
         pdf.set_font("Helvetica", "B", 15)
         pdf.set_text_color(15, 23, 42)
         pdf.multi_cell(usable_w, 7, _sanitize_pdf_text(title.upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -587,6 +797,8 @@ def generate_pdf_file(
         rendered_any = True
 
     idx = 0
+    is_first_cl_line = is_cover_letter
+    current_is_prose = False
     while idx < len(lines):
         raw = lines[idx].strip()
         if not raw or raw.startswith("<!--") or (raw.startswith("---") and len(raw) == 3):
@@ -596,9 +808,12 @@ def generate_pdf_file(
             idx += 1
             continue
 
-        # Document Name / Top Header
-        if raw.startswith("# ") and not raw.startswith("## "):
-            heading = _sanitize_pdf_text(_strip_markdown_markers(raw[2:]))
+        # Document Name / Top Header (including plain line-1 sender name on cover letters)
+        is_plain_cl_sender = is_first_cl_line and not raw.startswith("# ") and _looks_like_sender_name_line(raw)
+        is_first_cl_line = False
+        if (raw.startswith("# ") and not raw.startswith("## ")) or is_plain_cl_sender:
+            heading_src = raw[2:] if raw.startswith("# ") else raw
+            heading = _sanitize_pdf_text(_strip_markdown_markers(heading_src))
             pdf.set_font("Helvetica", "B", 16)
             pdf.set_text_color(15, 23, 42)
             pdf.multi_cell(
@@ -637,6 +852,7 @@ def generate_pdf_file(
         # Section Heading (## )
         if raw.startswith("## "):
             sec_heading = _sanitize_pdf_text(_strip_markdown_markers(raw[3:])).upper()
+            current_is_prose = any(k in sec_heading for k in ("SUMMARY", "PROFILE", "OBJECTIVE"))
             pdf.ln(2.5)
             pdf.set_font("Helvetica", "B", 10.5)
             pdf.set_text_color(15, 23, 42)
@@ -666,27 +882,32 @@ def generate_pdf_file(
             continue
 
         # Entry header (### Title or **Role** — Company | Date)
-        if raw.startswith("### ") or (not is_cover_letter and (raw.startswith("**") or ("—" in raw and "|" in raw))):
-            clean_entry = _strip_markdown_markers(raw[4:] if raw.startswith("### ") else raw)
-            main_part, date_part = clean_entry, ""
-            if " | " in clean_entry:
-                main_part, date_part = [p.strip() for p in clean_entry.rsplit(" | ", 1)]
+        if raw.startswith("### ") or (not is_cover_letter and _is_entry_header(raw, is_prose_section=current_is_prose)):
+            main_part, date_part = _parse_entry_header(raw)
             pdf.ln(1.5)
-            pdf.set_font("Helvetica", "B", 9.8)
-            pdf.set_text_color(15, 23, 42)
             if date_part:
-                date_w = 42
-                title_w = usable_w - date_w
-                y_before = pdf.get_y()
-                pdf.multi_cell(title_w, 5.0, _sanitize_pdf_text(main_part), align="L", new_x=XPos.RIGHT, new_y=YPos.TOP)
-                y_after_title = pdf.get_y()
-                pdf.set_xy(margin_x + title_w, y_before)
                 pdf.set_font("Helvetica", "", 8.8)
+                safe_date = _sanitize_pdf_text(date_part)
+                date_w = min(max(42.0, pdf.get_string_width(safe_date) + 4.0), usable_w * 0.45)
+                title_w = usable_w - date_w
+                if pdf.get_y() + 12 > pdf.page_break_trigger:
+                    pdf.add_page()
+                y_before = pdf.get_y()
+                page_before = pdf.page
+                pdf.set_xy(margin_x + title_w, y_before)
                 pdf.set_text_color(100, 116, 139)
-                pdf.cell(date_w, 5.0, _sanitize_pdf_text(date_part), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                if y_after_title > pdf.get_y():
-                    pdf.set_y(y_after_title)
+                pdf.cell(date_w, 5.0, safe_date, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                y_after_date = pdf.get_y()
+
+                pdf.set_xy(margin_x, y_before)
+                pdf.set_font("Helvetica", "B", 9.8)
+                pdf.set_text_color(15, 23, 42)
+                pdf.multi_cell(title_w, 5.0, _sanitize_pdf_text(main_part), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                if pdf.page == page_before and pdf.get_y() < y_after_date:
+                    pdf.set_y(y_after_date)
             else:
+                pdf.set_font("Helvetica", "B", 9.8)
+                pdf.set_text_color(15, 23, 42)
                 pdf.multi_cell(usable_w, 5.0, _sanitize_pdf_text(main_part), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             rendered_any = True
             idx += 1
@@ -721,3 +942,38 @@ def generate_pdf_file(
 
     pdf.output(str(target_path))
     return str(target_path)
+
+
+def generate_pdf_file(
+    markdown_text: str,
+    output_path: str,
+    doc_type: str = "cv",
+    title: str = "",
+) -> str:
+    """
+    Render Markdown CV or Cover Letter text into a valid vector A4 PDF file.
+    Primary renderer uses HTML + Playwright Chromium; falls back to FPDF2 on failure.
+    Creates parent directories if needed and returns output_path.
+    """
+    target_path = Path(output_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    is_cover_letter = (doc_type or "").strip().lower() in {"cover_letter", "cl", "letter"}
+
+    effective_md = (markdown_text or "").strip()
+    if not effective_md and title:
+        effective_md = f"# {title}"
+
+    disable_pw = os.getenv("DISABLE_PLAYWRIGHT_PDF", "").strip().lower() in {"1", "true", "yes"}
+    if not disable_pw:
+        try:
+            html_content = (
+                render_cover_letter_html(effective_md)
+                if is_cover_letter
+                else render_cv_html(effective_md)
+            )
+            if _export_html_via_playwright(html_content, str(target_path), is_cover_letter):
+                return str(target_path)
+        except Exception as exc:
+            logger.warning("Playwright PDF export failed (%s); falling back to FPDF2.", exc)
+
+    return _generate_fpdf2_fallback(markdown_text, target_path, doc_type=doc_type, title=title)

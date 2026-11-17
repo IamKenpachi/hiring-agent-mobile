@@ -131,6 +131,13 @@ function AuthNavigationGuard() {
         }}
       />
       <Stack.Screen
+        name="tailoring"
+        options={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
         name="output/[id]"
         options={{
           title: "Tailored Application",

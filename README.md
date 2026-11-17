@@ -1,6 +1,6 @@
 # Hiring Agent Mobile
 
-Cross-platform AI career command center built with **Expo (React Native + Expo Router + TypeScript + NativeWind v4)**, **FastAPI**, **Google ADK**, **python-jobspy**, **fpdf2**, and **Supabase** (with local SQLite fallback for offline/development runs).
+Cross-platform AI career command center built with **Expo (React Native + Expo Router + TypeScript + NativeWind v4)**, **FastAPI**, **Google ADK**, **python-jobspy**, **Playwright Chromium** (with **fpdf2** fallback), and **Supabase** (with local SQLite fallback for offline/development runs).
 
 ---
 
@@ -19,9 +19,10 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  • home               Post-Login Home Hub (Hunter, Studio, History,     |
 |                       Master Profiles, & Account Menu)                  |
 |  • (tabs)/hunt        3-Stage JobSpy Hunter (Config -> Live -> Results)   |
-|  • job/[id]           4-Score Fit Audit + Skills + "Yes, Tailor" CTA    |
+|  • job/[id]           4-Score Fit Audit + Formatted JD + Copy + Tailor  |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
-|  • (tabs)/outputs     Saved Tailored Applications & Fit/ATS Badges      |
+|  • tailoring          Animated AI Wait Screen (7s Min + Witty Quips)    |
+|  • (tabs)/outputs     Saved Outputs + Fit/ATS Badges + Delete Modal     |
 |  • output/[id]        3-Slide Carousel (CV / Cover Letter / Keywords)   |
 |                       + AI Revision Copilot + A4 PDF Download/Share     |
 |  • (tabs)/settings    Multi-Profile Manager, Live Key Check & Telemetry |
@@ -36,7 +37,7 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  • /api/profiles      Multi-Profile CRUD + /parse-preview + ParserAgent |
 |  • /api/hunt          8-Board JobSpy Scraper + 4-Stage SSE + Matcher    |
 |  • /api/studio        JDExtractorAgent + ApplicationTailorPipeline      |
-|  • /api/outputs       Saved Outputs + RevisionCopilotAgent + fpdf2 PDFs |
+|  • /api/outputs       Saved Outputs (CRUD, Delete + PDF Cleanup, PDFs)  |
 |  • /api/telemetry     Real-Time Token I/O & USD Cost Telemetry          |
 +------------------------------------+------------------------------------+
                                      | SQLAlchemy 2.0 ORM
@@ -79,10 +80,20 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 2. **Live Execution Progress**: Streams live backend progress (SSE on Web, polling fallback on native) across 4 distinct stages — **Multi-Board JobSpy Scraping**, **Deduplication & Normalization**, **AI Match & ATS Scoring**, and **Ranking Top Matches** — with partial-board warnings, failure recovery controls, and a **Show Results →** transition CTA upon completion.
 3. **Top Ranked Matches**: Displays sorted job match cards with `Overall Fit`, `Skills`, `Experience`, and `ATS` score badges linking straight to `job/[id]`.
 
+### Executive CV & Cover Letter Generation + Vector PDFs
+- **Strict Markdown Templates & Typed Schemas (`app/templates/cv_templates.py`, `app/agents/adk_agents.py`)**: Ported executive Data Analyst, Generic, and Cover Letter Markdown templates with strongly typed `ExperienceSchema`, `ProjectSchema`, and `EducationSchema` Pydantic models for Gemini `response_schema` compatibility.
+- **Honest Tailoring & Resilient Fallbacks**: Reframes real experience, projects, and education using Job Description terminology without fabricating unverified tools; includes direct `google.genai` template synthesis fallback and section-aware deterministic parsing if live ADK orchestration errors.
+- **Playwright Chromium Vector A4 PDF Export (`app/services/pdf_service.py`)**: Renders `Plus Jakarta Sans` executive HTML (SVG contact icons, 2-column CSS skills grid, justified bullets and prose) into vector A4 PDFs via headless Chromium, with an improved `fpdf2` fallback.
+
+### Job Description Reader, Waiting Screen & Saved Outputs Delete
+- **Formatted JD Reader & Copy (`mobile/src/lib/descriptionParser.ts`, `job/[id]`)**: Normalizes JobSpy scraping whitespace/escapes and wrapped bullets into clean headings, bullet lists, and inline bold/italic spans, with a top-right **Copy** button (`expo-clipboard` + web fallback) and `"Copied!"` check feedback.
+- **Animated Tailoring Waiting Page (`mobile/app/tailoring.tsx`, `tailorSession.ts`)**: Shared dedicated screen for both Instant Tailor Studio and Job Match Analysis featuring orbital ring animations, a 7-second minimum display timer, rotating witty status quips, `AbortSignal` cancellation, and retry/back error handling.
+- **Saved Outputs Delete (`(tabs)/outputs`, `DELETE /api/outputs/{output_id}`)**: Per-card trash button and dark confirmation modal removing both the saved `TailoredOutput` record and its generated PDF directory on disk.
+
 ### Live Key Verification, Error Handling & Telemetry Accuracy
 - **Live Gemini Key Validation**: `/api/auth/validate-gemini-key` defaults to `verify_live=True`, rejecting placeholders and invalid keys (`API_KEY_INVALID`) against Google Gemini before saving in Onboarding or Settings (with inline error banners in both screens).
 - **Explicit Auth Errors (`401`) & Clean Fallbacks**: Invalid/expired Gemini API keys raise `GeminiAuthError` rather than falling back silently; interactive routes return HTTP `401` JSON with CORS headers intact, and background hunts surface failure details on the Progress screen. Transient non-auth live fallbacks log zero phantom tokens (`record_token_usage` skipped when `0` tokens are returned).
-- **Safe Resume Parsing & PostgreSQL Integrity**: `CatchAllExceptionMiddleware` preserves `Access-Control-Allow-Origin` headers on unexpected `500` JSON responses, `/api/profiles/upload-pdf` and `/api/profiles/parse-preview` strip `\x00` NUL bytes and execute synchronously off the event loop, and profile creation + token telemetry commit atomically.
+- **Safe Resume Parsing & PostgreSQL Integrity**: `CatchAllExceptionMiddleware` preserves `Access-Control-Allow-Origin` headers on unexpected `500` JSON responses, `/api/profiles/upload-pdf` and `/api/profiles/parse-preview` normalize PDF ligature glyphs (`fi`/`fl`/`ffi`), strip `\x00` NUL bytes, and execute synchronously off the event loop, and profile creation + token telemetry commit atomically.
 
 ---
 
@@ -106,6 +117,7 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r requirements.txt
+playwright install chromium   # one-time browser setup for vector A4 PDFs
 cp .env.example .env
 uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
@@ -141,9 +153,10 @@ cd backend
 pytest -v
 ```
 
-### Mobile TypeScript Verification
+### Mobile Unit Tests & TypeScript Verification
 ```bash
 cd mobile
+node --test src/lib/__tests__/descriptionParser.test.mjs src/lib/__tests__/tailorSession.test.mjs
 npx tsc --noEmit
 ```
 

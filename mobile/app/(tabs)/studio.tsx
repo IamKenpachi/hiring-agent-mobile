@@ -25,6 +25,7 @@ import {
 import { COLORS } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { setPendingTailorRequest } from "../../src/lib/tailorSession";
 
 const SAMPLE_JDS = [
   {
@@ -89,7 +90,6 @@ export default function StudioScreen() {
   const [confirmingReset, setConfirmingReset] = useState(false);
 
   const [extracting, setExtracting] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
 
@@ -154,16 +154,16 @@ export default function StudioScreen() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     if (trimmedJd.length < 10) {
       setError("Please paste at least 10 characters of the Job Description first.");
       return;
     }
 
-    setGenerating(true);
     setError(null);
-    try {
-      const output = await apiClient.tailorStudio({
+    setPendingTailorRequest({
+      source: "studio",
+      payload: {
         job_title: jobTitle.trim() || undefined,
         company: company.trim() || undefined,
         job_url: jobUrl.trim() || undefined,
@@ -172,20 +172,13 @@ export default function StudioScreen() {
         tone,
         profile_id: activeProfile?.id,
         model: selectedModel,
-      });
-      await refreshTelemetry();
-      router.push(`/output/${output.id}`);
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Failed to generate tailored application."
-      );
-    } finally {
-      setGenerating(false);
-    }
+      },
+      jobTitle: jobTitle.trim(),
+      company: company.trim(),
+      model: selectedModel,
+      tone,
+    });
+    router.push("/tailoring");
   };
 
   return (
@@ -438,21 +431,15 @@ export default function StudioScreen() {
         {/* Generate CTA */}
         <Pressable
           onPress={handleGenerate}
-          disabled={generating || !trimmedJd}
+          disabled={!trimmedJd}
           style={[
             styles.generateBtn,
-            (generating || !trimmedJd) && { opacity: 0.55 },
+            !trimmedJd && { opacity: 0.55 },
           ]}
         >
-          {generating ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Zap size={17} color="#FDE047" />
-          )}
+          <Zap size={17} color="#FDE047" />
           <Text style={styles.generateBtnText}>
-            {generating
-              ? "AI Agents Tailoring Application..."
-              : "Generate Tailored Application"}
+            Generate Tailored Application
           </Text>
         </Pressable>
       </View>

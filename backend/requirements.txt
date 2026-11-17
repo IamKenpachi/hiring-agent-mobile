@@ -3,6 +3,7 @@ uvicorn[standard]
 google-adk
 google-genai
 python-jobspy>=1.1.82
+playwright==1.44.0
 fpdf2>=2.8.1
 pypdf>=4.2.0
 supabase

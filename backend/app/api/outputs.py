@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -75,6 +76,43 @@ def get_output_detail(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tailored output not found.")
     return serialize_tailored_output(row)
+
+
+@router.delete("/{output_id}")
+def delete_output(
+    output_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Delete a saved tailored output and remove its generated PDF files from disk."""
+    row = (
+        db.execute(
+            select(TailoredOutput).where(
+                TailoredOutput.id == output_id,
+                TailoredOutput.user_id == current_user.id,
+            )
+        )
+        .scalar_one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tailored output not found.")
+
+    outputs_root = OUTPUTS_DIR.resolve()
+    output_dir = (OUTPUTS_DIR / current_user.id / row.id).resolve()
+    pdf_paths = [p for p in (row.cv_pdf_path, row.cl_pdf_path) if p]
+
+    db.delete(row)
+    db.commit()
+
+    for raw_pdf_path in pdf_paths:
+        pdf_path = Path(raw_pdf_path)
+        if not pdf_path.is_dir():
+            pdf_path.unlink(missing_ok=True)
+
+    if output_dir != outputs_root and output_dir.is_relative_to(outputs_root):
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    return {"deleted": True, "id": output_id}
 
 
 @router.post("/{output_id}/revise")

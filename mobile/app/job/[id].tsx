@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -12,7 +12,9 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Building2,
+  Check,
   CheckCircle2,
+  Copy,
   DollarSign,
   ExternalLink,
   MapPin,
@@ -22,6 +24,12 @@ import {
 import { COLORS } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { copyToClipboard } from "../../src/lib/clipboard";
+import {
+  parseJobDescription,
+  type TextSpan,
+} from "../../src/lib/descriptionParser";
+import { setPendingTailorRequest } from "../../src/lib/tailorSession";
 import { ScoreBar } from "../../src/components/ScoreBadge";
 import type { RankedJob } from "../../src/types";
 
@@ -33,17 +41,67 @@ const TONES = [
   "Conversational",
 ];
 
+function renderTextSpans(spans: TextSpan[]) {
+  return spans.map((span, index) => {
+    const linkUrl =
+      span.linkUrl && /^(https?:|mailto:)/i.test(span.linkUrl)
+        ? span.linkUrl
+        : undefined;
+    if (!span.bold && !span.italic && !linkUrl) {
+      return <React.Fragment key={index}>{span.text}</React.Fragment>;
+    }
+    return (
+      <Text
+        key={index}
+        onPress={
+          linkUrl ? () => void Linking.openURL(linkUrl).catch(() => {}) : undefined
+        }
+        style={[
+          span.bold && styles.descBold,
+          span.italic && styles.descItalic,
+          linkUrl && styles.descLink,
+        ]}
+      >
+        {span.text}
+      </Text>
+    );
+  });
+}
+
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { selectedModel, refreshTelemetry } = useAuth();
+  const { selectedModel } = useAuth();
 
   const [job, setJob] = useState<RankedJob | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tailoring, setTailoring] = useState(false);
   const [tone, setTone] = useState("Modern & Impactful");
   const [customCapabilities, setCustomCapabilities] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [copiedDesc, setCopiedDesc] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const descriptionBlocks = useMemo(
+    () => parseJobDescription(job?.description || ""),
+    [job?.description]
+  );
+
+  useEffect(() => {
+    setCopiedDesc(false);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+  }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -74,29 +132,37 @@ export default function JobDetailScreen() {
     };
   }, [id]);
 
-  const handleTailorJob = async () => {
+  const handleTailorJob = () => {
     if (!job) return;
-    setTailoring(true);
     setError(null);
-    try {
-      const output = await apiClient.tailorJob(job.id, {
+    setPendingTailorRequest({
+      source: "job",
+      jobId: job.id,
+      payload: {
         tone,
         custom_capabilities: customCapabilities.trim() || undefined,
         model: selectedModel,
-      });
-      await refreshTelemetry();
-      router.push(`/output/${output.id}`);
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Failed to tailor CV & Cover Letter."
-      );
-    } finally {
-      setTailoring(false);
+      },
+      jobTitle: job.title?.trim() || "Target Role",
+      company: job.company?.trim() || "",
+      model: selectedModel,
+      tone,
+    });
+    router.push("/tailoring");
+  };
+
+  const handleCopyDescription = async () => {
+    if (!job?.description) return;
+    const copied = await copyToClipboard(job.description);
+    if (!copied) return;
+    setCopiedDesc(true);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
     }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedDesc(false);
+      copyTimerRef.current = null;
+    }, 2000);
   };
 
   if (loading) {
@@ -115,6 +181,8 @@ export default function JobDetailScreen() {
       </View>
     );
   }
+
+  const hasDescription = Boolean(job.description && job.description.trim().length > 0);
 
   return (
     <View style={styles.root}>
@@ -276,10 +344,82 @@ export default function JobDetailScreen() {
 
         {/* Full Description */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Full Job Description</Text>
-          <Text selectable style={styles.fullDesc}>
-            {job.description || "No full description provided."}
-          </Text>
+          <View style={styles.descHeaderRow}>
+            <Text style={styles.sectionTitle}>Full Job Description</Text>
+            {hasDescription ? (
+              <Pressable
+                onPress={() => void handleCopyDescription()}
+                accessibilityRole="button"
+                accessibilityLabel="Copy job description"
+                style={({ pressed }) => [
+                  styles.copyBtn,
+                  copiedDesc && styles.copyBtnCopied,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                {copiedDesc ? (
+                  <Check size={13} color={COLORS.emerald} />
+                ) : (
+                  <Copy size={13} color={COLORS.textSecondary} />
+                )}
+                <Text
+                  style={[
+                    styles.copyBtnText,
+                    copiedDesc && styles.copyBtnTextCopied,
+                  ]}
+                >
+                  {copiedDesc ? "Copied!" : "Copy"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {descriptionBlocks.length > 0 ? (
+            <View style={styles.descBody}>
+              {descriptionBlocks.map((block, idx) => {
+                if (block.type === "heading") {
+                  return (
+                    <Text
+                      key={`desc-h-${idx}`}
+                      selectable
+                      style={[
+                        styles.descHeading,
+                        idx > 0 && styles.descHeadingSpaced,
+                      ]}
+                    >
+                      {block.text}
+                    </Text>
+                  );
+                }
+                if (block.type === "bullet") {
+                  return (
+                    <View key={`desc-b-${idx}`} style={styles.descBulletRow}>
+                      <Text
+                        style={[
+                          styles.descBulletMarker,
+                          block.marker.length > 1 && styles.descNumberMarker,
+                        ]}
+                      >
+                        {block.marker}
+                      </Text>
+                      <Text selectable style={styles.descBulletText}>
+                        {renderTextSpans(block.spans)}
+                      </Text>
+                    </View>
+                  );
+                }
+                return (
+                  <Text key={`desc-p-${idx}`} selectable style={styles.fullDesc}>
+                    {renderTextSpans(block.spans)}
+                  </Text>
+                );
+              })}
+            </View>
+          ) : (
+            <Text selectable style={styles.fullDesc}>
+              No full description provided.
+            </Text>
+          )}
         </View>
 
         {error ? (
@@ -293,19 +433,10 @@ export default function JobDetailScreen() {
       <View style={styles.stickyBar}>
         <Pressable
           onPress={handleTailorJob}
-          disabled={tailoring}
-          style={[styles.ctaBtn, tailoring && { opacity: 0.65 }]}
+          style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
         >
-          {tailoring ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Sparkles size={18} color="#FFFFFF" />
-          )}
-          <Text style={styles.ctaText}>
-            {tailoring
-              ? "ADK Agents Tailoring CV & Cover Letter..."
-              : "Yes, Tailor CV & Cover Letter"}
-          </Text>
+          <Sparkles size={18} color="#FFFFFF" />
+          <Text style={styles.ctaText}>Yes, Tailor CV & Cover Letter</Text>
         </Pressable>
       </View>
     </View>
@@ -508,10 +639,86 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     textAlignVertical: "top",
   },
+  descHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  copyBtnCopied: {
+    backgroundColor: COLORS.emeraldSoft,
+    borderColor: COLORS.emeraldBorder,
+  },
+  copyBtnText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  copyBtnTextCopied: {
+    color: COLORS.emerald,
+    fontWeight: "700",
+  },
+  descBody: {
+    gap: 8,
+  },
+  descHeading: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    lineHeight: 19,
+    color: COLORS.textPrimary,
+  },
+  descHeadingSpaced: {
+    marginTop: 6,
+  },
+  descBulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingLeft: 2,
+  },
+  descBulletMarker: {
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+    minWidth: 10,
+  },
+  descNumberMarker: {
+    minWidth: 20,
+  },
+  descBulletText: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
+  },
   fullDesc: {
     fontSize: 13,
     lineHeight: 20,
     color: COLORS.textSecondary,
+  },
+  descBold: {
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  descItalic: {
+    fontStyle: "italic",
+  },
+  descLink: {
+    color: "#93C5FD",
+    textDecorationLine: "underline",
   },
   errorBanner: {
     backgroundColor: COLORS.roseSoft,

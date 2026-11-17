@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import re
 import uuid
 from typing import Any, Coroutine, Dict, List, Optional, Tuple, Type, TypeVar
 
+from google import genai
 from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
@@ -19,6 +21,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from app.core.config import DEFAULT_MODEL, resolve_gemini_model
+from app.templates.cv_templates import get_cover_letter_template, get_cv_template
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,8 @@ _CURATED_SKILLS_CATALOG: List[str] = [
     "Pandas",
     "NumPy",
     "Scikit-Learn",
+    "Matplotlib",
+    "Seaborn",
     "PyTorch",
     "TensorFlow",
     "Statsmodels",
@@ -99,18 +104,28 @@ _CURATED_SKILLS_CATALOG: List[str] = [
     "Looker",
     "Metabase",
     "Excel",
+    "Power Query",
+    "VBA",
+    "DAX",
     "A/B Testing",
     "Experimentation",
     "Statistical Modeling",
+    "Statistical Analysis",
     "Causal Inference",
+    "Predictive Modeling",
+    "Time-Series Forecasting",
+    "Data Visualization",
     "ETL",
     "ELT",
     "Data Modeling",
     "Dimensional Modeling",
     "Data Governance",
+    "Data Quality",
     "Great Expectations",
+    "Jupyter",
     "CI/CD",
     "Git",
+    "GitHub",
     "GitHub Actions",
     "Docker",
     "Kubernetes",
@@ -296,6 +311,8 @@ class ProjectSchema(BaseModel):
     name: str = Field(default="")
     description: str = Field(default="")
     technologies: List[str] = Field(default_factory=list)
+    year: str = Field(default="")
+    highlights: List[str] = Field(default_factory=list)
     url: str = Field(default="")
 
 
@@ -320,6 +337,7 @@ class ProfileParsedOutput(BaseModel):
     projects: List[ProjectSchema] = Field(default_factory=list)
     education: List[EducationSchema] = Field(default_factory=list)
     certifications: List[str] = Field(default_factory=list)
+    languages: List[str] = Field(default_factory=list)
     raw_markdown: str = Field(default="")
 
 
@@ -358,10 +376,11 @@ class CVJsonOutput(BaseModel):
     portfolio_url: str = Field(default="")
     summary: str = Field(default="")
     skills: List[str] = Field(default_factory=list)
-    experience: List[Dict[str, Any]] = Field(default_factory=list)
-    projects: List[Dict[str, Any]] = Field(default_factory=list)
-    education: List[Dict[str, Any]] = Field(default_factory=list)
+    experience: List[ExperienceSchema] = Field(default_factory=list)
+    projects: List[ProjectSchema] = Field(default_factory=list)
+    education: List[EducationSchema] = Field(default_factory=list)
     certifications: List[str] = Field(default_factory=list)
+    languages: List[str] = Field(default_factory=list)
 
 
 class CVTailorOutput(BaseModel):
@@ -475,31 +494,35 @@ def create_application_tailor_pipeline(
     tone: str = "Executive & Formal",
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
+    job_description: str = "",
 ) -> SequentialAgent:
     """Build the Google ADK SequentialAgent combining CVStrategistAgent and CoverLetterWriterAgent."""
     adk_model = _build_adk_model(model_name, api_key)
+    cv_template_text = get_cv_template(job_description)
+    cl_template_text = get_cover_letter_template()
 
     cv_strategist = LlmAgent(
         name="CVStrategistAgent",
         model=adk_model,
-        description="Tailors candidate CV with Aggressive Keyword Injection and computes 4 post-tailoring scores.",
+        description="Tailors candidate CV using the strict executive Markdown template and computes 4 fit/ATS scores.",
         instruction=(
-            "You are a Senior Executive CV Strategist. Tailor the candidate's CV for the target job.\n"
-            "CRITICAL — AGGRESSIVE KEYWORD INJECTION:\n"
-            "Identify high-value technical, domain, and tool keywords present in the job description "
-            "that are missing from the base candidate profile. Naturally inject them into the tailored "
-            "CV's Skills table and Experience / Project bullet points to maximize ATS keyword alignment, "
-            "and list every newly injected keyword in `injected_keywords` (exact strings not in base profile).\n"
-            "Format `cv_markdown` strictly using:\n"
-            "- `# FULL NAME`\n"
-            "- Single pipe-separated contact line\n"
-            "- `## PROFESSIONAL SUMMARY`\n"
-            "- `## CORE TECHNICAL SKILLS` with `| Category | Tools |` rows\n"
-            "- `## PROFESSIONAL EXPERIENCE` with `**Role** — Company | Dates` and `- ` metric bullets\n"
-            "- `## KEY PROJECTS`, `## EDUCATION`, `## CERTIFICATIONS`\n"
-            "Also populate `cv_json` and evaluate the 4 post-tailoring scores (0-100): "
-            "overall_fit_score, skills_match_score, experience_fit_score, ats_keyword_score, plus "
-            "matched_skills, missing_skills, match_reason, and recommendation."
+            "You are a Senior Executive CV Strategist and technical recruiter.\n"
+            "Given the candidate profile and job posting, create a tailored CV in `cv_markdown` that strictly "
+            "follows the Markdown template below.\n\n"
+            f"Template to Follow Strictly:\n{cv_template_text}\n\n"
+            "Rules:\n"
+            "1. Preserve ALL personal information (name, location, phone, email, linkedin, github) and all real "
+            "employers, degrees, and projects from the candidate profile.\n"
+            "2. Select 2-3 most relevant projects from the candidate profile under `## KEY PROJECTS` and tailor "
+            "their impact bullets (XYZ formula with numbers/percentages) to align with the job description.\n"
+            "3. Tailor `## PROFESSIONAL SUMMARY`, `## CORE TECHNICAL SKILLS` (using the 4-category `| Category | Tools |` "
+            "table), and `## PROFESSIONAL EXPERIENCE` bullets to highlight key skills matching this job description.\n"
+            "4. Reframe experience and project bullets using JD terminology and weave in closely related "
+            "analytical/domain concepts, and record newly aligned JD domain/analytical keywords in `injected_keywords`.\n"
+            "5. Do NOT invent false qualifications, fake tools the candidate has never used, or unformatted keyword lists.\n"
+            "6. Populate `cv_json` and evaluate the 4 post-tailoring scores (0-100): overall_fit_score, "
+            "skills_match_score, experience_fit_score, ats_keyword_score, plus matched_skills, missing_skills, "
+            "match_reason, and recommendation."
         ),
         output_schema=CVTailorOutput,
         output_key="tailored_cv_bundle",
@@ -508,13 +531,19 @@ def create_application_tailor_pipeline(
     cover_letter_writer = LlmAgent(
         name="CoverLetterWriterAgent",
         model=adk_model,
-        description="Writes a tailored cover letter informed by CVStrategistAgent output.",
+        description="Writes a tailored executive cover letter following the strict letterhead template.",
         instruction=(
             f"You are an Expert Executive Cover Letter Writer using the requested tone: '{tone}'.\n"
-            "Review the tailored CV output produced in the previous step: {tailored_cv_bundle}\n"
-            "Write a persuasive, well-structured Markdown cover letter addressed to the Hiring Team "
-            "with a `# Candidate Name` header, `**Re: [Job Title] Application**`, opening hook, "
-            "two quantified achievement paragraphs aligned with the target JD, and confident close."
+            "Write a high-impact, persuasive cover letter in `cover_letter_markdown` for the candidate applying "
+            "to the target role and company.\n\n"
+            f"Template Structure:\n{cl_template_text}\n\n"
+            "Rules:\n"
+            "1. Follow the template structure strictly: Candidate FULL NAME on line 1, pipe-separated contact line "
+            "on line 2, current date, Hiring Manager + Company Name, `**Re: [Job Title] Application**`, "
+            "`Dear [Company] Hiring Team,`, 4 well-structured paragraphs, and `Sincerely,\\n\\nFULL NAME`.\n"
+            "2. Clearly articulate passion for the company and highlight 1-2 major quantified achievements/projects "
+            "from the candidate profile that solve the company's specific needs.\n"
+            f"3. Match the requested tone: '{tone}'."
         ),
         output_schema=CoverLetterOutput,
         output_key="tailored_cover_letter",
@@ -703,32 +732,226 @@ def _extract_known_skills(text: str) -> List[str]:
     return found
 
 
+_NON_SKILL_JD_TERMS = {
+    "about",
+    "overview",
+    "summary",
+    "profile",
+    "description",
+    "responsibilities",
+    "requirements",
+    "qualifications",
+    "preferred",
+    "benefits",
+    "perks",
+    "salary",
+    "compensation",
+    "bonus",
+    "equity",
+    "pension",
+    "holiday",
+    "holidays",
+    "vacation",
+    "apply",
+    "application",
+    "hiring",
+    "recruiting",
+    "recruitment",
+    "job",
+    "position",
+    "opportunity",
+    "career",
+    "careers",
+    "mission",
+    "vision",
+    "values",
+    "culture",
+    "diversity",
+    "inclusion",
+    "equal",
+    "eeo",
+    "hello",
+    "dear",
+    "hi",
+    "regards",
+    "sincerely",
+    "thanks",
+    "thank",
+    "welcome",
+    "please",
+    "note",
+    "fyi",
+    "tbd",
+    "tbc",
+    "etc",
+    "pulse",
+    "group",
+    "role",
+    "team",
+    "teams",
+    "company",
+    "organization",
+    "employer",
+    "department",
+    "division",
+    "london",
+    "manchester",
+    "birmingham",
+    "edinburgh",
+    "portsmouth",
+    "uk",
+    "usa",
+    "emea",
+    "apac",
+    "remote",
+    "hybrid",
+    "onsite",
+    "office",
+    "location",
+    "based",
+    "city",
+    "country",
+    "senior",
+    "junior",
+    "mid",
+    "lead",
+    "principal",
+    "staff",
+    "head",
+    "director",
+    "manager",
+    "intern",
+    "graduate",
+    "entry",
+    "associate",
+    "assistant",
+    "specialist",
+    "analyst",
+    "engineer",
+    "scientist",
+    "architect",
+    "consultant",
+    "coordinator",
+    "developer",
+    "data",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+    "dec",
+    "ltd",
+    "inc",
+    "llc",
+    "plc",
+    "corp",
+    "gmbh",
+    "bank",
+    "holdings",
+    "ventures",
+    "partners",
+    "solutions",
+    "services",
+    "technologies",
+    "labs",
+    "studio",
+    "gbp",
+    "usd",
+    "eur",
+    "cad",
+    "aud",
+    "chf",
+    "aed",
+    "annum",
+    "year",
+    "years",
+    "month",
+    "months",
+    "week",
+    "weeks",
+    "day",
+    "days",
+    "hour",
+    "hours",
+    "full",
+    "part",
+    "time",
+    "permanent",
+    "contract",
+    "temporary",
+    "bsc",
+    "msc",
+    "phd",
+    "mba",
+    "bba",
+    "meng",
+    "beng",
+    "cv",
+    "resume",
+    "ceo",
+    "cto",
+    "cfo",
+    "coo",
+    "gmt",
+    "bst",
+    "utc",
+    "est",
+    "pst",
+    "cet",
+    "nda",
+}
+
+
 def _extract_jd_keywords(job_title: str, job_description: str, limit: int = 24) -> List[str]:
-    """Extract prioritized technical skills and salient domain keywords from a job posting."""
+    """Extract prioritized technical skills and genuine technical acronyms from a job posting."""
     combined = f"{job_title or ''}\n{job_description or ''}"
     skills = _extract_known_skills(combined)
     seen = {s.lower() for s in skills}
 
-    # Supplement with domain keywords / capitalized technologies if catalog didn't cover everything
-    tokens = re.findall(r"\b[A-Za-z][A-Za-z0-9+#.-]{2,}\b", combined)
+    # Supplement only with genuine mixed-case / symbol / short technical acronyms (never random prose)
+    tokens = re.findall(r"\b[A-Za-z][A-Za-z0-9+#.-]{1,}\b", combined)
     for tok in tokens:
-        low = tok.lower().strip(".,")
-        if len(low) < 3 or low in _STOPWORDS or low in seen:
+        clean_tok = tok.strip(".,-")
+        low = clean_tok.lower()
+        if not clean_tok or clean_tok.endswith("'s"):
             continue
-        if any(c.isupper() for c in tok[1:]) or "+" in tok or "#" in tok or tok.isupper():
-            skills.append(tok.strip(".,"))
+        if len(low) < 3 and "+" not in clean_tok and "#" not in clean_tok:
+            continue
+        if low in _STOPWORDS or low in _NON_SKILL_JD_TERMS or low in seen:
+            continue
+        if any(c.isupper() for c in clean_tok[1:]) or "+" in clean_tok or "#" in clean_tok or clean_tok.isupper():
+            # Skip generic ALL-CAPS prose headers (e.g. RESPONSIBILITIES, BENEFITS, OVERVIEW)
+            if clean_tok.isupper() and len(clean_tok) > 5 and not any(ch.isdigit() for ch in clean_tok):
+                continue
+            skills.append(clean_tok)
             seen.add(low)
         if len(skills) >= limit:
             break
-
-    if len(skills) < 8:
-        for tok in tokens:
-            low = tok.lower().strip(".,")
-            if len(low) >= 4 and low not in _STOPWORDS and low not in seen:
-                skills.append(low)
-                seen.add(low)
-            if len(skills) >= limit:
-                break
 
     return skills[:limit]
 
@@ -816,6 +1039,198 @@ def _compute_four_scores(
     }
 
 
+_SKILL_CATEGORY_RULES: List[Tuple[str, Tuple[str, ...]]] = [
+    (
+        "Programming & Databases",
+        (
+            "python",
+            "sql",
+            "postgresql",
+            "postgres",
+            "mysql",
+            "sqlite",
+            "oracle",
+            "t-sql",
+            "pl/sql",
+            "nosql",
+            "mongodb",
+            "pandas",
+            "numpy",
+            "scikit-learn",
+            "sklearn",
+            "matplotlib",
+            "seaborn",
+            "scipy",
+            "statsmodels",
+            "pytorch",
+            "tensorflow",
+            "r",
+            "java",
+            "javascript",
+            "typescript",
+            "node.js",
+            "react",
+            "fastapi",
+            "django",
+            "flask",
+            "graphql",
+            "rest api",
+            "git",
+            "github",
+            "gitlab",
+            "bash",
+            "c++",
+            "c#",
+        ),
+    ),
+    (
+        "BI & Visualization",
+        (
+            "power bi",
+            "powerbi",
+            "tableau",
+            "looker",
+            "lookml",
+            "metabase",
+            "superset",
+            "qlik",
+            "grafana",
+            "excel",
+            "advanced excel",
+            "power query",
+            "vba",
+            "dax",
+            "pivot tables",
+            "visualization",
+            "dashboard",
+        ),
+    ),
+    (
+        "Cloud & Engineering",
+        (
+            "etl",
+            "elt",
+            "airflow",
+            "dagster",
+            "dbt",
+            "snowflake",
+            "bigquery",
+            "redshift",
+            "databricks",
+            "spark",
+            "pyspark",
+            "kafka",
+            "hadoop",
+            "fivetran",
+            "docker",
+            "kubernetes",
+            "terraform",
+            "aws",
+            "gcp",
+            "azure",
+            "ci/cd",
+            "github actions",
+            "data modeling",
+            "dimensional modeling",
+            "data governance",
+            "data quality",
+            "great expectations",
+            "jupyter",
+            "pipeline",
+        ),
+    ),
+    (
+        "Analytical Methods",
+        (
+            "statistical",
+            "a/b testing",
+            "experimentation",
+            "causal inference",
+            "predictive",
+            "machine learning",
+            "generative ai",
+            "llm",
+            "rag",
+            "prompt engineering",
+            "forecasting",
+            "time-series",
+            "financial modeling",
+            "financial reconciliation",
+            "cohort analysis",
+            "kpi reporting",
+            "product analytics",
+            "retention",
+            "regression",
+            "classification",
+            "clustering",
+            "data analysis",
+            "analytics",
+        ),
+    ),
+]
+
+
+def _classify_skill_category(skill: str) -> str:
+    """Assign a skill string to one of the 4 executive CV categories or Domain & Tools."""
+    low = skill.strip().lower()
+    if not low:
+        return "Domain & Tools"
+    for category, keywords in _SKILL_CATEGORY_RULES:
+        for kw in keywords:
+            if re.search(rf"(?<![a-z0-9]){re.escape(kw)}(?![a-z0-9])", low):
+                return category
+    return "Domain & Tools"
+
+
+def _build_categorized_skills_rows(skills: List[str]) -> List[str]:
+    """Group flat skills into executive Markdown table rows across the 4 standard categories."""
+    buckets: Dict[str, List[str]] = {
+        "Programming & Databases": [],
+        "BI & Visualization": [],
+        "Cloud & Engineering": [],
+        "Analytical Methods": [],
+        "Domain & Tools": [],
+    }
+    seen_lower: set[str] = set()
+    for raw_skill in skills:
+        clean_skill = str(raw_skill).strip()
+        if not clean_skill:
+            continue
+        low = clean_skill.lower()
+        if low in seen_lower:
+            continue
+        seen_lower.add(low)
+        cat = _classify_skill_category(clean_skill)
+        buckets[cat].append(clean_skill)
+
+    rows: List[str] = []
+    for cat in (
+        "Programming & Databases",
+        "BI & Visualization",
+        "Cloud & Engineering",
+        "Analytical Methods",
+        "Domain & Tools",
+    ):
+        items = buckets[cat]
+        if items:
+            rows.append(f"| {cat} | {', '.join(items)} |")
+    return rows
+
+
+def _split_project_bullets(desc: str) -> List[str]:
+    """Split multi-line or multi-sentence project description into crisp bullet points."""
+    cleaned = (desc or "").strip()
+    if not cleaned:
+        return []
+    if "\n" in cleaned:
+        parts = [ln.lstrip("-*• ").strip() for ln in cleaned.splitlines() if ln.strip()]
+        if parts:
+            return parts
+    # Split only at sentence boundaries followed by a capital letter to preserve numbers like 1.2M
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z])", cleaned) if s.strip()]
+    return sents or [cleaned]
+
+
 def build_profile_markdown(profile_data: Dict[str, Any]) -> str:
     """Build clean canonical CV Markdown from structured profile fields."""
     full_name = str(profile_data.get("full_name") or "Candidate Name").strip()
@@ -838,12 +1253,12 @@ def build_profile_markdown(profile_data: Dict[str, Any]) -> str:
         lines.append(summary)
         lines.append("")
 
-    skills = profile_data.get("skills") or []
+    skills = [str(s).strip() for s in (profile_data.get("skills") or []) if str(s).strip()]
     if skills:
         lines.append("## CORE TECHNICAL SKILLS")
         lines.append("| Category | Tools |")
         lines.append("| --- | --- |")
-        lines.append(f"| Core Stack | {', '.join(str(s).strip() for s in skills if str(s).strip())} |")
+        lines.extend(_build_categorized_skills_rows(skills))
         lines.append("")
 
     experience = profile_data.get("experience") or []
@@ -868,7 +1283,9 @@ def build_profile_markdown(profile_data: Dict[str, Any]) -> str:
             if isinstance(highlights, str):
                 highlights = [h.strip() for h in highlights.splitlines() if h.strip()]
             for h in highlights:
-                lines.append(f"- {str(h).lstrip('-* ').strip()}")
+                clean_h = str(h).lstrip("-*• ").strip()
+                if clean_h:
+                    lines.append(f"- {clean_h}")
             desc = str(exp.get("description") or "").strip()
             if desc and not highlights:
                 lines.append(f"- {desc}")
@@ -889,11 +1306,22 @@ def build_profile_markdown(profile_data: Dict[str, Any]) -> str:
                 tech_str = ", ".join(str(t).strip() for t in techs if str(t).strip())
             else:
                 tech_str = str(techs).strip()
-            header = f"**{name}**" + (f" — {tech_str}" if tech_str else "")
+            year = str(proj.get("year") or proj.get("date") or proj.get("duration") or "").strip()
+            header = f"**{name}**" + (f" — {tech_str}" if tech_str else "") + (f" | {year}" if year else "")
             lines.append(header)
-            desc = str(proj.get("description") or "").strip()
-            if desc:
-                lines.append(f"- {desc}")
+            highlights = proj.get("highlights") or proj.get("bullets") or []
+            if isinstance(highlights, str):
+                highlights = [h.strip() for h in highlights.splitlines() if h.strip()]
+            if highlights:
+                for h in highlights:
+                    clean_h = str(h).lstrip("-*• ").strip()
+                    if clean_h:
+                        lines.append(f"- {clean_h}")
+            else:
+                desc = str(proj.get("description") or "").strip()
+                if desc:
+                    for part in _split_project_bullets(desc):
+                        lines.append(f"- {part}")
             lines.append("")
 
     education = profile_data.get("education") or []
@@ -920,84 +1348,397 @@ def build_profile_markdown(profile_data: Dict[str, Any]) -> str:
         lines.append("## CERTIFICATIONS")
         for c in certs:
             if str(c).strip():
-                lines.append(f"- {str(c).strip()}")
+                lines.append(f"- {str(c).strip().lstrip('-*• ')}")
+        lines.append("")
+
+    languages = profile_data.get("languages") or []
+    if languages:
+        lines.append("## LANGUAGES")
+        for lang in languages:
+            if isinstance(lang, dict):
+                l_name = str(lang.get("language") or lang.get("name") or "").strip()
+                l_level = str(lang.get("level") or lang.get("proficiency") or "").strip()
+                if l_name:
+                    lines.append(f"- {l_name}: {l_level}" if l_level else f"- {l_name}")
+            elif str(lang).strip():
+                lines.append(f"- {str(lang).strip().lstrip('-*• ')}")
         lines.append("")
 
     return "\n".join(lines).strip()
 
 
+_SECTION_HEADING_PATTERNS: List[Tuple[str, re.Pattern[str]]] = [
+    (
+        "SUMMARY",
+        re.compile(
+            r"^(?:professional\s+summary|executive\s+summary|career\s+summary|summary|profile|about(?:\s+me)?|objective)$",
+            re.I,
+        ),
+    ),
+    (
+        "EDUCATION",
+        re.compile(
+            r"^(?:education(?:al)?(?:\s+background)?|academic\s+background|qualifications|education\s*&\s*training)$",
+            re.I,
+        ),
+    ),
+    (
+        "SKILLS",
+        re.compile(
+            r"^(?:core\s+technical\s+skills|technical\s+skills|core\s+skills|core\s+competencies|skills(?:\s*&\s*tools)?|technologies)$",
+            re.I,
+        ),
+    ),
+    (
+        "EXPERIENCE",
+        re.compile(
+            r"^(?:work\s+experience|professional\s+experience|experience|employment(?:\s+history)?|career\s+history)$",
+            re.I,
+        ),
+    ),
+    (
+        "PROJECTS",
+        re.compile(
+            r"^(?:key\s+projects|projects|selected\s+projects|academic\s+projects|personal\s+projects)$",
+            re.I,
+        ),
+    ),
+    (
+        "CERTIFICATIONS",
+        re.compile(r"^(?:certifications?|licenses?\s*(?:&|and)\s*certifications?|credentials)$", re.I),
+    ),
+    (
+        "LANGUAGES",
+        re.compile(r"^languages?$", re.I),
+    ),
+    (
+        "OTHER",
+        re.compile(
+            r"^(?:soft\s+skills|interpersonal\s+skills|strengths|additional\s+candidate\s+capabilities|additional\s+capabilities|interests|hobbies|awards|honors|publications|references)$",
+            re.I,
+        ),
+    ),
+]
+
+_BULLET_LINE_RE = re.compile(r"^(?:[-•]|\*(?!\*))\s*")
+_DATE_ONLY_LINE_RE = re.compile(
+    r"^(?:(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+)?(?:19|20)\d{2}(?:\s*[-–—]\s*(?:present|current|now|(?:(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+)?(?:19|20)\d{2}))?$",
+    re.I,
+)
+_TRAILING_DATE_RE = re.compile(
+    r"\s+((?:(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+)?(?:19|20)\d{2}(?:\s*[-–—]\s*(?:present|current|now|(?:(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+)?(?:19|20)\d{2})))$",
+    re.I,
+)
+_CATALOG_CANONICAL_BY_LOWER: Dict[str, str] = {s.lower(): s for s in _CURATED_SKILLS_CATALOG}
+
+
+def _detect_section_heading(line: str) -> Optional[str]:
+    """Return canonical section name if line is a standalone resume section header."""
+    if not line or _BULLET_LINE_RE.match(line) or line.startswith("|"):
+        return None
+    cand = re.sub(r"^#+\s*", "", line).replace("**", "").strip().rstrip(":").strip()
+    if not cand or len(cand) > 55 or "@" in cand or "http" in cand.lower():
+        return None
+    for sec_name, pattern in _SECTION_HEADING_PATTERNS:
+        if pattern.match(cand):
+            return sec_name
+    return None
+
+
+def _split_skill_tokens(raw_text: str) -> List[str]:
+    """Extract clean individual skill names from comma/semicolon lists including parentheticals."""
+    tokens: List[str] = []
+    # Split on top-level commas or semicolons (ignoring commas inside parentheses)
+    chunks: List[str] = []
+    depth = 0
+    buf: List[str] = []
+    for ch in raw_text:
+        if ch == "(":
+            depth += 1
+            buf.append(ch)
+        elif ch == ")":
+            depth = max(0, depth - 1)
+            buf.append(ch)
+        elif ch in {",", ";"} and depth == 0:
+            part = "".join(buf).strip()
+            if part:
+                chunks.append(part)
+            buf = []
+        else:
+            buf.append(ch)
+    tail = "".join(buf).strip()
+    if tail:
+        chunks.append(tail)
+
+    for chunk in chunks:
+        paren_m = re.match(r"^(.+?)\s*\(([^()]+)\)\s*$", chunk)
+        if paren_m:
+            base = paren_m.group(1).strip()
+            inner = [p.strip() for p in paren_m.group(2).split(",") if p.strip()]
+            for item in [base, *inner]:
+                if item and len(item) <= 45 and len(item.split()) <= 5:
+                    tokens.append(item)
+        else:
+            clean = chunk.strip()
+            if clean and len(clean) <= 45 and len(clean.split()) <= 5:
+                tokens.append(clean)
+    return tokens
+
+
 def _fallback_parse_profile(raw_text: str) -> Dict[str, Any]:
-    """Deterministic resume parser extracting structured profile fields from raw text."""
+    """Section-aware deterministic resume parser extracting structured profile fields from raw text."""
     text = (raw_text or "").strip()
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
     email_match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
     phone_match = re.search(r"(?:\+?\d[\d\s().-]{7,}\d)", text)
-    linkedin_match = re.search(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_-]+/?", text, re.I)
-    github_match = re.search(r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_-]+/?", text, re.I)
-    portfolio_match = re.search(r"https?://(?!(?:www\.)?(?:linkedin|github)\.com)[^\s|]+", text, re.I)
+    linkedin_match = re.search(
+        r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_.-]+/?",
+        text,
+        re.I,
+    )
+    github_match = re.search(
+        r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_.-]+/?",
+        text,
+        re.I,
+    )
+    portfolio_match = re.search(r"https?://(?!(?:www\.)?(?:linkedin|github)\.com)[^\s|•]+", text, re.I)
 
     full_name = "Candidate Profile"
     for ln in lines[:5]:
-        cleaned = re.sub(r"^#+\s*", "", ln).strip()
-        if cleaned and "@" not in cleaned and "http" not in cleaned.lower() and "|" not in cleaned:
+        if _detect_section_heading(ln) is not None:
+            continue
+        cleaned = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+        if cleaned and "@" not in cleaned and "http" not in cleaned.lower() and "|" not in cleaned and "•" not in cleaned:
             if len(cleaned.split()) <= 6:
                 full_name = cleaned
                 break
 
+    # Extract location from pipe/bullet contact bar first, then fallback to known cities/countries
     location = ""
-    loc_match = re.search(
-        r"\b(London|Manchester|New York|San Francisco|Remote|Berlin|Toronto|Dubai|Bengaluru|UK|USA)\b(?:,\s*[A-Za-z ]+)?",
-        text,
-        re.I,
-    )
-    if loc_match:
-        location = loc_match.group(0).strip()
+    for ln in lines[:6]:
+        if "|" in ln or ("•" in ln and "@" in ln):
+            sep = "|" if "|" in ln else "•"
+            parts = [p.strip() for p in ln.split(sep) if p.strip()]
+            for part in parts:
+                low_p = part.lower()
+                if (
+                    "@" in part
+                    or "http" in low_p
+                    or "linkedin" in low_p
+                    or "github" in low_p
+                    or re.match(r"^[\d\s+().-]{7,}$", part)
+                ):
+                    continue
+                if len(part) <= 60:
+                    location = part
+                    break
+            if location:
+                break
 
+    if not location:
+        loc_match = re.search(
+            r"\b(Portsmouth|London|Manchester|New York|San Francisco|Remote|Berlin|Toronto|Dubai|Bengaluru|Casablanca|UK|USA)\b(?:,\s*[A-Za-z ]+)?",
+            text,
+            re.I,
+        )
+        if loc_match:
+            location = loc_match.group(0).strip()
+
+    # Split lines into canonical resume sections so headings never bleed across sections
+    sections: Dict[str, List[str]] = {
+        "HEADER": [],
+        "SUMMARY": [],
+        "EDUCATION": [],
+        "SKILLS": [],
+        "EXPERIENCE": [],
+        "PROJECTS": [],
+        "CERTIFICATIONS": [],
+        "LANGUAGES": [],
+        "OTHER": [],
+    }
+    seen_sections: set[str] = set()
+    current_section = "HEADER"
+
+    for ln in lines:
+        sec = _detect_section_heading(ln)
+        if sec is not None:
+            current_section = sec
+            seen_sections.add(sec)
+            continue
+
+        # Handle inline section prefixes like "Summary: Highly analytical..."
+        if not _BULLET_LINE_RE.match(ln) and not ln.startswith("|"):
+            inline_m = re.match(
+                r"^(?:#+\s*|\*\*)?(professional\s+summary|executive\s+summary|summary|profile|about(?:\s+me)?|education|skills|core\s+technical\s+skills|experience|work\s+experience|professional\s+experience|projects|key\s+projects|certifications?|languages?)(?:\*\*)?\s*:\s*(.+)$",
+                ln,
+                re.I,
+            )
+            if inline_m:
+                detected = _detect_section_heading(inline_m.group(1))
+                if detected:
+                    current_section = detected
+                    seen_sections.add(detected)
+                    rest = inline_m.group(2).strip()
+                    if rest:
+                        sections[current_section].append(rest)
+                    continue
+
+        sections[current_section].append(ln)
+
+    # Skills: combine curated catalog matches + explicit entries inside SKILLS section
     skills = _extract_known_skills(text)
+    seen_skill_lower = {s.lower() for s in skills}
+    for ln in sections["SKILLS"]:
+        clean_ln = ln.strip()
+        if not clean_ln:
+            continue
+        if clean_ln.startswith("|"):
+            cells = [c.strip() for c in clean_ln.split("|") if c.strip()]
+            if not cells or all(
+                c.replace("-", "").replace(":", "") == "" or c.lower() in {"category", "tools", "skills", "tools/skills"}
+                for c in cells
+            ):
+                continue
+            skill_text = cells[1] if len(cells) >= 2 else cells[0]
+        else:
+            no_bullet = _BULLET_LINE_RE.sub("", clean_ln).replace("**", "").strip()
+            skill_text = no_bullet.split(":", 1)[1].strip() if ":" in no_bullet else no_bullet
+
+        for raw_tok in _split_skill_tokens(skill_text):
+            low = raw_tok.lower()
+            canonical = _CATALOG_CANONICAL_BY_LOWER.get(low, raw_tok)
+            if low in seen_skill_lower:
+                continue
+            # If a 2-3 word skill refines a 1-word catalog match (e.g., "Advanced Excel" vs "Excel"), prefer the specific phrase
+            if len(raw_tok.split()) <= 3:
+                subsumed = [
+                    sk for sk in list(seen_skill_lower)
+                    if len(sk.split()) == 1 and re.search(rf"(?<![a-z0-9]){re.escape(sk)}(?![a-z0-9])", low)
+                ]
+                if subsumed:
+                    skills = [s for s in skills if s.lower() not in subsumed]
+                    for sk in subsumed:
+                        seen_skill_lower.discard(sk)
+            # Avoid adding verbose multi-word wrappers if a multi-word catalog skill is already listed
+            elif any(
+                re.search(rf"(?<![a-z0-9]){re.escape(sk)}(?![a-z0-9])", low) for sk in seen_skill_lower
+            ):
+                continue
+            skills.append(canonical)
+            seen_skill_lower.add(canonical.lower())
+
     if not skills:
         skills = ["SQL", "Python", "Data Analysis", "Communication"]
+    else:
+        skills_lower = {s.lower() for s in skills}
+        redundant_singles = {
+            s.lower()
+            for s in skills
+            if (
+                f"advanced {s.lower()}" in skills_lower
+                or f"time-series {s.lower()}" in skills_lower
+                or f"{s.lower()} notebooks" in skills_lower
+                or f"{s.lower()} concepts" in skills_lower
+            )
+        }
+        if redundant_singles:
+            skills = [s for s in skills if s.lower() not in redundant_singles]
 
-    # Extract summary paragraph if present
+    # Summary: extract strictly from SUMMARY section
     summary = ""
-    sec_summary = re.search(
-        r"(?:summary|profile|about)\s*[:\n]+(.+?)(?:\n\s*(?:#|skills|experience|work|education|projects)|$)",
-        text,
-        re.I | re.S,
-    )
-    if sec_summary:
-        summary = " ".join(sec_summary.group(1).strip().splitlines())[:500]
+    if sections["SUMMARY"]:
+        summary = " ".join(
+            _BULLET_LINE_RE.sub("", ln).replace("**", "").strip() for ln in sections["SUMMARY"]
+        ).strip()
     elif lines:
         summary = f"Experienced professional specializing in {', '.join(skills[:5])}."
 
-    # Extract role experience lines accurately without matching emails or hyphenated words
+    # Experience: parse strictly inside EXPERIENCE section
     experience: List[Dict[str, Any]] = []
-    exp_line_re = re.compile(
-        r"^([A-Za-z0-9 /&+]{3,50}?)\s+(?:—|–|-|\bat\b)\s+([A-Za-z0-9 .&,'-]{2,50}?)(?:\s*\|\s*(.+))?$"
-    )
-    all_bullets = [ln.lstrip("-*• ").strip() for ln in lines if ln.startswith(("-", "*", "•"))]
-    for ln in lines:
-        ln_clean = re.sub(r"^(?:#+\s*|[-*•]\s*)", "", ln).replace("**", "").strip()
-        if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower() or "linkedin.com" in ln_clean.lower():
+    current_exp: Optional[Dict[str, Any]] = None
+    for ln in sections["EXPERIENCE"]:
+        if _BULLET_LINE_RE.match(ln):
+            bullet = _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+            if bullet:
+                if current_exp is not None:
+                    current_exp["highlights"].append(bullet)
+                else:
+                    current_exp = {
+                        "title": "Specialist",
+                        "company": "Organization",
+                        "duration": "",
+                        "location": location,
+                        "highlights": [bullet],
+                    }
+                    experience.append(current_exp)
             continue
-        low = ln_clean.lower()
-        if any(k in low for k in ("university", "college", "b.sc", "bsc", "m.sc", "msc", "b.a.", "m.a.", "ph.d", "phd", "bachelor", "master")):
+
+        ln_clean = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+        if not ln_clean:
             continue
-        m = exp_line_re.match(ln_clean)
-        if m:
-            title, comp, dates = m.group(1), m.group(2), m.group(3)
-            experience.append(
-                {
-                    "title": title.strip(),
-                    "company": comp.strip(),
-                    "duration": (dates or "Recent").strip(),
-                    "location": location,
-                    "highlights": all_bullets[:3]
-                    or [f"Delivered measurable analytics and engineering outcomes using {', '.join(skills[:3])}."],
-                }
-            )
-            if len(experience) >= 4:
-                break
+
+        if current_exp is not None and not current_exp["duration"] and _DATE_ONLY_LINE_RE.match(ln_clean):
+            current_exp["duration"] = ln_clean
+            continue
+
+        duration = ""
+        main_part = ln_clean
+        if "|" in ln_clean:
+            main_part, duration = [p.strip() for p in ln_clean.rsplit("|", 1)]
+        else:
+            trail_m = _TRAILING_DATE_RE.search(main_part)
+            if trail_m:
+                duration = trail_m.group(1).strip()
+                main_part = main_part[: trail_m.start()].strip()
+
+        sep_m = re.match(r"^(.+?)\s+(?:—|–|-|\bat\b)\s+(.+)$", main_part)
+        if sep_m:
+            title = sep_m.group(1).strip()
+            comp = sep_m.group(2).strip()
+        elif current_exp is not None and not duration:
+            # Continuation line for previous role rather than a phantom new role
+            current_exp["highlights"].append(ln_clean)
+            continue
+        else:
+            title = main_part
+            comp = ""
+
+        current_exp = {
+            "title": title,
+            "company": comp,
+            "duration": duration,
+            "location": location,
+            "highlights": [],
+        }
+        experience.append(current_exp)
+
+    # Unsectioned fallback ONLY when there was no EXPERIENCE section heading at all
+    if not experience and "EXPERIENCE" not in seen_sections:
+        exp_line_re = re.compile(
+            r"^([A-Za-z0-9 /&+]{3,50}?)\s+(?:—|–|-|\bat\b)\s+([A-Za-z0-9 .&,'-]{2,50}?)(?:\s*\|\s*(.+))?$"
+        )
+        for ln in sections["HEADER"]:
+            ln_clean = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+            if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower() or ln_clean == full_name:
+                continue
+            low = ln_clean.lower()
+            if any(
+                k in low
+                for k in ("university", "college", "b.sc", "bsc", "m.sc", "msc", "b.a.", "m.a.", "ph.d", "phd", "bachelor", "master")
+            ):
+                continue
+            m = exp_line_re.match(ln_clean)
+            if m:
+                experience.append(
+                    {
+                        "title": m.group(1).strip(),
+                        "company": m.group(2).strip(),
+                        "duration": (m.group(3) or "").strip(),
+                        "location": location,
+                        "highlights": [],
+                    }
+                )
 
     if not experience:
         experience.append(
@@ -1006,42 +1747,155 @@ def _fallback_parse_profile(raw_text: str) -> Dict[str, Any]:
                 "company": "Enterprise Delivery",
                 "duration": "2021 - Present",
                 "location": location,
-                "highlights": all_bullets[:4] or [f"Applied {', '.join(skills[:4])} to drive business KPIs."],
+                "highlights": [f"Applied {', '.join(skills[:4])} to drive business KPIs."],
             }
         )
 
+    # Projects: parse strictly inside PROJECTS section
+    projects: List[Dict[str, Any]] = []
+    current_proj: Optional[Dict[str, Any]] = None
+    for ln in sections["PROJECTS"]:
+        if _BULLET_LINE_RE.match(ln):
+            bullet = _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+            if bullet and current_proj is not None:
+                current_proj["highlights"].append(bullet)
+                current_proj["description"] = " ".join(current_proj["highlights"])
+            continue
+
+        ln_clean = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+        if not ln_clean:
+            continue
+
+        year = ""
+        main_part = ln_clean
+        if "|" in ln_clean:
+            main_part, year = [p.strip() for p in ln_clean.rsplit("|", 1)]
+
+        proj_name = main_part
+        tech_list: List[str] = []
+        dash_m = re.match(r"^(.+?)\s+(?:—|–|-)\s+(.+)$", main_part)
+        paren_m = re.match(r"^(.+?)\s*\(([^()]+)\)\s*$", main_part)
+        if dash_m:
+            proj_name = dash_m.group(1).strip()
+            tech_raw = dash_m.group(2).strip()
+            tech_list = [t.strip() for t in tech_raw.split(",") if t.strip()]
+        elif paren_m:
+            proj_name = paren_m.group(1).strip()
+            tech_raw = paren_m.group(2).strip()
+            tech_list = [t.strip() for t in tech_raw.split(",") if t.strip()]
+
+        current_proj = {
+            "name": proj_name,
+            "description": "",
+            "technologies": tech_list,
+            "year": year,
+            "highlights": [],
+            "url": "",
+        }
+        projects.append(current_proj)
+
+    if not projects:
+        projects.append(
+            {
+                "name": "End-to-End Analytics & Automation Suite",
+                "description": f"Built reproducible workflows leveraging {', '.join(skills[:4])}.",
+                "technologies": skills[:4],
+                "year": "",
+                "highlights": [f"Built reproducible workflows leveraging {', '.join(skills[:4])}."],
+                "url": "",
+            }
+        )
+
+    # Education: parse strictly inside EDUCATION section (preserving ALL degrees & date ranges)
     education: List[Dict[str, Any]] = []
-    edu_line_re = re.compile(
-        r"\b((?:B\.?Sc\.?|M\.?Sc\.?|B\.?Eng\.?|M\.?Eng\.?|Ph\.?D\.?|Bachelor(?:'s)?|Master(?:'s)?|Doctorate|B\.A\.?|M\.A\.?)\b[^|\n—–]{1,65}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$",
-        re.I,
-    )
-    edu_abbrev_re = re.compile(
-        r"\b((?:BA|MA|BS|MS)\s+(?:in|of)\s+[^|\n—–]{2,55}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$"
-    )
-    for ln in lines:
-        ln_clean = re.sub(r"^(?:#+\s*|[-*•]\s*)", "", ln).replace("**", "").strip()
-        if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower():
+    for ln in sections["EDUCATION"]:
+        if _BULLET_LINE_RE.match(ln):
+            bullet = _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+            if bullet and education and not re.search(
+                r"\b(?:b\.?sc|m\.?sc|b\.?eng|m\.?eng|ph\.?d|bachelor|master|doctorate|diploma|degree|ba|ma|bs|ms)\b",
+                bullet,
+                re.I,
+            ):
+                prev_det = education[-1].get("details", "")
+                education[-1]["details"] = f"{prev_det}; {bullet}".strip("; ")
+                continue
+            ln_clean = bullet
+        else:
+            ln_clean = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+
+        if not ln_clean:
             continue
-        if any(bad in ln_clean.lower() for bad in ("summary", "master profile", "master resume")):
+
+        if education and not education[-1]["year"] and _DATE_ONLY_LINE_RE.match(ln_clean):
+            education[-1]["year"] = ln_clean
             continue
-        # Guard against bare two-letter words like "ma" unless written "B.A."/"M.A." or uppercase BA/MA
-        edu_match = None
-        if re.search(r"\b(?:b\.?sc|m\.?sc|b\.?eng|m\.?eng|ph\.?d|bachelor|master|doctorate|b\.a\.|m\.a\.)\b", ln_clean, re.I):
-            edu_match = edu_line_re.search(ln_clean)
-        elif re.search(r"\b(?:BA|MA|BS|MS)\s+(?:in|of)\b", ln_clean):
-            edu_match = edu_abbrev_re.search(ln_clean)
-        if edu_match:
-            tail = (edu_match.group(3) or "").strip()
-            year_match = re.search(r"\b((?:19|20)\d{2})\b", tail or ln_clean)
-            education.append(
-                {
-                    "degree": edu_match.group(1).strip(" ,-|—–"),
-                    "institution": (edu_match.group(2) or "University").strip(" ,-|—–"),
-                    "year": year_match.group(1) if year_match else "2020",
-                    "details": "",
-                }
-            )
-            break
+
+        year = ""
+        main_part = ln_clean
+        if "|" in ln_clean:
+            main_part, year = [p.strip() for p in ln_clean.rsplit("|", 1)]
+        else:
+            trail_m = _TRAILING_DATE_RE.search(main_part)
+            if trail_m:
+                year = trail_m.group(1).strip()
+                main_part = main_part[: trail_m.start()].strip()
+
+        sep_m = re.match(r"^(.+?)\s+(?:—|–|-|\bat\b)\s+(.+)$", main_part)
+        if sep_m:
+            degree = sep_m.group(1).strip(" ,-|—–")
+            inst = sep_m.group(2).strip(" ,-|—–")
+        else:
+            degree = main_part.strip(" ,-|—–")
+            inst = "University"
+
+        education.append(
+            {
+                "degree": degree,
+                "institution": inst,
+                "year": year,
+                "details": "",
+            }
+        )
+
+    # Unsectioned fallback ONLY if no EDUCATION section header existed
+    if not education and "EDUCATION" not in seen_sections:
+        edu_line_re = re.compile(
+            r"\b((?:B\.?Sc\.?|M\.?Sc\.?|B\.?Eng\.?|M\.?Eng\.?|Ph\.?D\.?|Bachelor(?:'s)?|Master(?:'s)?|Doctorate|B\.A\.?|M\.A\.?)\b[^|\n—–]{1,65}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$",
+            re.I,
+        )
+        edu_abbrev_re = re.compile(
+            r"\b((?:BA|MA|BS|MS)\s+(?:in|of)\s+[^|\n—–]{2,55}?)(?:\s+(?:—|–|-|\bat\b|,)\s+([^|\n•]{2,60}?))?(?:\s*(?:\||•)\s*([^\n]+))?$"
+        )
+        for ln in sections["HEADER"]:
+            ln_clean = re.sub(r"^#+\s*", "", ln).replace("**", "").strip()
+            if not ln_clean or "@" in ln_clean or "http" in ln_clean.lower():
+                continue
+            edu_match = None
+            if re.search(r"\b(?:b\.?sc|m\.?sc|b\.?eng|m\.?eng|ph\.?d|bachelor|master|doctorate|b\.a\.|m\.a\.)\b", ln_clean, re.I):
+                edu_match = edu_line_re.search(ln_clean)
+            elif re.search(r"\b(?:BA|MA|BS|MS)\s+(?:in|of)\b", ln_clean):
+                edu_match = edu_abbrev_re.search(ln_clean)
+            if edu_match:
+                tail = (edu_match.group(3) or "").strip()
+                education.append(
+                    {
+                        "degree": edu_match.group(1).strip(" ,-|—–"),
+                        "institution": (edu_match.group(2) or "University").strip(" ,-|—–"),
+                        "year": tail or "2020",
+                        "details": "",
+                    }
+                )
+
+    certifications = [
+        _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+        for ln in sections["CERTIFICATIONS"]
+        if _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+    ]
+    languages = [
+        _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+        for ln in sections["LANGUAGES"]
+        if _BULLET_LINE_RE.sub("", ln).replace("**", "").strip()
+    ]
 
     profile_dict: Dict[str, Any] = {
         "full_name": full_name,
@@ -1054,16 +1908,10 @@ def _fallback_parse_profile(raw_text: str) -> Dict[str, Any]:
         "summary": summary,
         "skills": skills,
         "experience": experience,
-        "projects": [
-            {
-                "name": "End-to-End Analytics & Automation Suite",
-                "description": f"Built reproducible workflows leveraging {', '.join(skills[:4])}.",
-                "technologies": skills[:4],
-                "url": "",
-            }
-        ],
+        "projects": projects,
         "education": education,
-        "certifications": [],
+        "certifications": certifications,
+        "languages": languages,
     }
     profile_dict["raw_markdown"] = text if text.startswith("# ") else build_profile_markdown(profile_dict)
     return profile_dict
@@ -1132,7 +1980,7 @@ def _fallback_extract_jd(raw_text: str) -> Dict[str, Any]:
 
 
 def _extract_profile_header(profile_markdown: str) -> Dict[str, str]:
-    """Pull candidate name and contact line from profile markdown."""
+    """Pull candidate name and contact line from profile markdown or plain text."""
     lines = [ln.strip() for ln in (profile_markdown or "").splitlines() if ln.strip()]
     full_name = "Candidate Name"
     contact_line = ""
@@ -1143,10 +1991,32 @@ def _extract_profile_header(profile_markdown: str) -> Dict[str, str]:
                 contact_line = lines[idx + 1]
             break
 
+    if full_name == "Candidate Name" and lines:
+        first_clean = re.sub(r"^#+\s*", "", lines[0]).replace("**", "").strip()
+        if (
+            first_clean
+            and "@" not in first_clean
+            and "http" not in first_clean.lower()
+            and "|" not in first_clean
+            and len(first_clean.split()) <= 6
+            and _detect_section_heading(first_clean) is None
+        ):
+            full_name = first_clean
+            if len(lines) > 1 and ("|" in lines[1] or "@" in lines[1]):
+                contact_line = lines[1]
+
     email_m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", profile_markdown or "")
     phone_m = re.search(r"(?:\+?\d[\d\s().-]{7,}\d)", profile_markdown or "")
-    linkedin_m = re.search(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_-]+/?", profile_markdown or "", re.I)
-    github_m = re.search(r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_-]+/?", profile_markdown or "", re.I)
+    linkedin_m = re.search(
+        r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_.-]+/?",
+        profile_markdown or "",
+        re.I,
+    )
+    github_m = re.search(
+        r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_.-]+/?",
+        profile_markdown or "",
+        re.I,
+    )
 
     return {
         "full_name": full_name,
@@ -1171,6 +2041,11 @@ def _find_injected_keywords(base_profile: str, tailored_cv: str, job_description
     return injected
 
 
+def _format_dd_month_yyyy() -> str:
+    now = datetime.now(timezone.utc)
+    return f"{now.day} {now.strftime('%B %Y')}"
+
+
 def _render_tone_cover_letter(
     candidate_name: str,
     contact_line: str,
@@ -1180,74 +2055,132 @@ def _render_tone_cover_letter(
     matched_skills: List[str],
     injected_keywords: List[str],
     custom_capabilities: str,
+    experience: Optional[List[Dict[str, Any]]] = None,
+    projects: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
-    """Create a structured tone-tailored Markdown cover letter."""
+    """Create an executive letterhead Markdown cover letter matching cover_letter.md."""
     tone_lower = (tone or "Executive & Formal").lower()
-    key_stack = ", ".join((matched_skills + injected_keywords)[:5]) or "SQL, Python, and modern analytics"
+    key_stack = ", ".join(dict.fromkeys((matched_skills + injected_keywords)[:5])) or "SQL, Python, and modern analytics"
     cap_note = f" Furthermore, {custom_capabilities.strip()}" if custom_capabilities and custom_capabilities.strip() else ""
 
     if "conversational" in tone_lower:
         opening = (
-            f"I've been following {company}'s work closely and was immediately energized to see the {job_title} opening. "
-            f"Solving high-leverage problems with {key_stack} is where I do my best work."
+            f"I have been following {company}'s work closely and was immediately energized by the {job_title} opening. "
+            f"Solving high-leverage analytical challenges with {key_stack} is where I deliver my strongest impact."
         )
         closing = (
-            f"I'd love to chat about how I can bring this energy and hands-on expertise to {company} as your next {job_title}."
+            f"Thank you for your time and consideration. I would welcome the chance to discuss how I can bring this "
+            f"energy and hands-on expertise to {company} as your next {job_title}."
         )
     elif "technical" in tone_lower or "direct" in tone_lower:
         opening = (
-            f"I am applying for the {job_title} role at {company}. My engineering and analytics track record maps "
-            f"directly onto your production stack, specifically across {key_stack}."
+            f"The {job_title} opportunity at {company} aligns directly with my analytical engineering background across "
+            f"{key_stack}. Your focus on turning complex operational data into reliable, decision-ready systems maps "
+            f"closely to my hands-on delivery experience."
         )
         closing = (
-            f"I welcome a technical discussion on how my architecture and delivery experience can accelerate {company}'s roadmap."
+            f"Thank you for reviewing my application. I welcome a technical discussion on how my architecture and "
+            f"analytics track record can accelerate {company}'s roadmap."
         )
     elif "modern" in tone_lower or "impact" in tone_lower:
         opening = (
-            f"{company} is redefining the bar in its space, and I am eager to join as {job_title} to accelerate "
-            f"measurable product outcomes through {key_stack}."
+            f"{company} continues to raise the bar in its space, and I am eager to join as {job_title} to accelerate "
+            f"measurable business outcomes through {key_stack}."
         )
         closing = (
-            f"Thank you for your consideration—I look forward to demonstrating how I can drive immediate impact at {company}."
+            f"Thank you for your consideration. I look forward to demonstrating how I can drive immediate, measurable "
+            f"impact for {company}."
         )
     elif "confident" in tone_lower or "persuasive" in tone_lower:
         opening = (
-            f"With a proven record of turning complex datasets and pipelines into decisive growth levers, I am "
-            f"uniquely positioned to excel as {job_title} at {company}."
+            f"With a proven record of transforming complex datasets and workflows into decisive performance gains, I am "
+            f"well positioned to excel as {job_title} at {company}."
         )
         closing = (
-            f"I am confident that my track record with {key_stack} will add immediate velocity to {company}, and I look forward to connecting."
+            f"Thank you for considering my application. I am confident my expertise with {key_stack} will add immediate "
+            f"velocity to {company}, and I look forward to speaking with you."
         )
     else:
         opening = (
-            f"I am writing to express my strong interest in the {job_title} position at {company}. "
-            f"My background delivering enterprise-grade initiatives using {key_stack} aligns closely with your mandate."
+            f"The {job_title} position at {company} stands out as an ideal match for my background in {key_stack}. "
+            f"I am particularly drawn to {company}'s commitment to data-driven execution and measurable operational rigor."
         )
         closing = (
-            f"Thank you for considering my application. I welcome the opportunity to discuss how my experience supports {company}'s strategic goals."
+            f"Thank you for considering my application. I look forward to the opportunity to discuss how my analytical "
+            f"capabilities can support {company}'s strategic objectives."
         )
 
-    lines = [f"# {candidate_name}"]
+    # Paragraph 2: Anchor in real work experience highlight when available
+    top_exp = (experience or [None])[0]
+    if isinstance(top_exp, dict) and top_exp.get("title"):
+        exp_title = str(top_exp.get("title") or "").strip()
+        exp_comp = str(top_exp.get("company") or "").strip()
+        exp_bullets = [str(b).strip() for b in (top_exp.get("highlights") or []) if str(b).strip()]
+        lead_bullet = exp_bullets[0].rstrip(".") if exp_bullets else (
+            f"delivered data-backed analytical workflows powered by {key_stack}"
+        )
+        role_ref = f"as {exp_title} at {exp_comp}" if exp_comp else f"as {exp_title}"
+        para2 = (
+            f"In my work {role_ref}, I {lead_bullet[0].lower() + lead_bullet[1:] if len(lead_bullet) > 1 else lead_bullet}. "
+            f"By pairing structured problem-solving with {key_stack}, I consistently converted raw datasets into "
+            f"reliable reporting and measurable efficiency gains.{cap_note}"
+        )
+    else:
+        para2 = (
+            f"Across recent engagements, I architected automated workflows and executive reporting suites powered by "
+            f"{key_stack}, improving accuracy and cutting manual turnaround by over 25%.{cap_note}"
+        )
+
+    # Paragraph 3: Anchor in real key project + cross-functional fit
+    top_proj = (projects or [None])[0]
+    if isinstance(top_proj, dict) and top_proj.get("name"):
+        proj_name = str(top_proj.get("name") or "").strip()
+        proj_tech = ", ".join(str(t).strip() for t in (top_proj.get("technologies") or []) if str(t).strip())
+        proj_bullets = [str(b).strip() for b in (top_proj.get("highlights") or []) if str(b).strip()]
+        proj_detail = (
+            proj_bullets[0].rstrip(".")
+            if proj_bullets
+            else str(top_proj.get("description") or "").strip().rstrip(".")
+        )
+        tech_phrase = f" using {proj_tech}" if proj_tech else ""
+        if proj_detail:
+            para3 = (
+                f"Beyond core operations, I reinforced these capabilities through my {proj_name} initiative{tech_phrase}, "
+                f"where I {proj_detail[0].lower() + proj_detail[1:] if len(proj_detail) > 1 else proj_detail}. "
+                f"Equally important, I collaborate effectively with cross-functional stakeholders to translate "
+                f"business questions into clear, actionable deliverables."
+            )
+        else:
+            para3 = (
+                f"I further demonstrated these skills through {proj_name}{tech_phrase}, translating analytical findings "
+                f"into executive-ready insights while partnering smoothly across technical and business stakeholders."
+            )
+    else:
+        para3 = (
+            f"Equally important, I partner closely with cross-functional product, finance, and engineering stakeholders "
+            f"to translate complex business requirements into clear, scalable deliverables ready for decision-making."
+        )
+
+    lines = [candidate_name]
     if contact_line:
         lines.append(contact_line)
     lines.extend(
         [
             "",
-            f"**Re: {job_title} Application — {company}**",
+            _format_dd_month_yyyy(),
             "",
-            "Dear Hiring Team,",
+            "Hiring Manager",
+            company,
+            "",
+            f"**Re: {job_title} Application**",
+            "",
+            f"Dear {company} Hiring Team,",
             "",
             opening,
             "",
-            (
-                f"Across recent engagements, I architected automated workflows and executive reporting suites powered by "
-                f"{key_stack}, reducing manual turnaround by over 40% while elevating decision accuracy.{cap_note}"
-            ),
+            para2,
             "",
-            (
-                f"Equally important, I partner closely with cross-functional product and engineering stakeholders to "
-                f"translate ambiguous requirements into scalable, tested deliverables ready for production."
-            ),
+            para3,
             "",
             closing,
             "",
@@ -1267,7 +2200,7 @@ def _fallback_tailor_pipeline(
     custom_capabilities: str,
     tone: str,
 ) -> Dict[str, Any]:
-    """Deterministic ApplicationTailorPipeline performing Aggressive Keyword Injection."""
+    """Deterministic section-preserving ApplicationTailorPipeline."""
     combined_profile = profile_markdown.strip()
     if custom_capabilities and custom_capabilities.strip():
         combined_profile = f"{combined_profile}\n\nAdditional Candidate Capabilities:\n{custom_capabilities.strip()}"
@@ -1286,23 +2219,36 @@ def _fallback_tailor_pipeline(
         if len(injected_keywords) >= 6:
             break
 
-    # Guarantee at least one sensible JD keyword injection if JD has non-matching terms
     if not injected_keywords and pre_scores["missing_skills"]:
         injected_keywords = list(pre_scores["missing_skills"][:5])
 
-    all_skills = list(dict.fromkeys(existing_skills + injected_keywords))
-    injected_phrase = ", ".join(injected_keywords) if injected_keywords else ", ".join(all_skills[:4])
-
-    # Build tailored CV Markdown incorporating injected keywords into Summary, Skills table, and Experience
-    parsed = _fallback_parse_profile(combined_profile)
+    # Parse only the real base profile so custom_capabilities text never leaks into sections
+    parsed = _fallback_parse_profile(profile_markdown)
     if header["full_name"] != "Candidate Name":
         parsed["full_name"] = header["full_name"]
 
-    summary_line = (
-        f"Results-driven {job_title} candidate with proven expertise in {', '.join(all_skills[:5])}. "
-        f"Accomplished measurable KPI acceleration and production reliability by operationalizing {injected_phrase} "
-        f"aligned directly with {company}'s technical roadmap."
-    )
+    merged_existing_skills = list(dict.fromkeys(parsed.get("skills") or existing_skills))
+    all_skills = list(dict.fromkeys(merged_existing_skills + injected_keywords))
+    injected_phrase = ", ".join(injected_keywords) if injected_keywords else ", ".join(all_skills[:4])
+
+    base_summary = (parsed.get("summary") or "").strip()
+    if base_summary and not base_summary.startswith("Experienced professional specializing in"):
+        if injected_keywords:
+            summary_line = (
+                f"{base_summary} Tailored for {job_title} at {company}, applying proven strengths in "
+                f"{', '.join(all_skills[:4])} alongside {injected_phrase}."
+            )
+        else:
+            summary_line = (
+                f"{base_summary} Tailored for {job_title} at {company}, bringing demonstrated impact across "
+                f"{', '.join(all_skills[:5])}."
+            )
+    else:
+        summary_line = (
+            f"Results-driven {job_title} candidate with proven expertise in {', '.join(all_skills[:5])}. "
+            f"Accomplished measurable KPI acceleration and production reliability by operationalizing {injected_phrase} "
+            f"aligned directly with {company}'s technical roadmap."
+        )
 
     cv_lines = [f"# {parsed['full_name'].upper()}"]
     contact_line = header["contact_line"] or " | ".join(
@@ -1311,6 +2257,7 @@ def _fallback_tailor_pipeline(
     if contact_line:
         cv_lines.append(contact_line)
 
+    skill_rows = _build_categorized_skills_rows(merged_existing_skills or ["Python", "SQL", "Analytics"])
     cv_lines.extend(
         [
             "",
@@ -1320,18 +2267,19 @@ def _fallback_tailor_pipeline(
             "## CORE TECHNICAL SKILLS",
             "| Category | Tools |",
             "| --- | --- |",
-            f"| Core Stack | {', '.join(existing_skills[:8] or ['Python', 'SQL', 'Analytics'])} |",
-            f"| Target Role Alignment | {injected_phrase} |",
-            "",
-            "## PROFESSIONAL EXPERIENCE",
+            *skill_rows,
         ]
     )
+    if injected_keywords:
+        cv_lines.append(f"| Target Role Alignment | {injected_phrase} |")
+    cv_lines.extend(["", "## PROFESSIONAL EXPERIENCE"])
 
     for idx, exp in enumerate(parsed["experience"]):
         title = exp.get("title") or "Specialist"
         comp = exp.get("company") or "Organization"
-        dur = exp.get("duration") or "Recent"
-        cv_lines.append(f"**{title}** — {comp} | {dur}")
+        dur = exp.get("duration") or ""
+        exp_header = f"**{title}** — {comp}" + (f" | {dur}" if dur else "")
+        cv_lines.append(exp_header)
         for b in exp.get("highlights") or []:
             cv_lines.append(f"- {b}")
         if idx == 0 and injected_keywords:
@@ -1344,8 +2292,20 @@ def _fallback_tailor_pipeline(
         cv_lines.append("## KEY PROJECTS")
         for proj in parsed["projects"]:
             techs = ", ".join(proj.get("technologies") or all_skills[:4])
-            cv_lines.append(f"**{proj.get('name', 'Key Initiative')}** — {techs}")
-            cv_lines.append(f"- {proj.get('description', 'Delivered measurable business impact.')}")
+            year = str(proj.get("year") or "").strip()
+            p_header = (
+                f"**{proj.get('name', 'Key Initiative')}**"
+                + (f" — {techs}" if techs else "")
+                + (f" | {year}" if year else "")
+            )
+            cv_lines.append(p_header)
+            proj_bullets = proj.get("highlights") or _split_project_bullets(
+                str(proj.get("description") or "Delivered measurable business impact.")
+            )
+            for pb in proj_bullets:
+                clean_pb = str(pb).lstrip("-*• ").strip()
+                if clean_pb:
+                    cv_lines.append(f"- {clean_pb}")
             cv_lines.append("")
 
     if parsed["education"]:
@@ -1354,6 +2314,20 @@ def _fallback_tailor_pipeline(
             cv_lines.append(
                 f"**{edu.get('degree', 'Degree')}** — {edu.get('institution', 'University')} | {edu.get('year', '')}".rstrip(" |")
             )
+        cv_lines.append("")
+
+    if parsed.get("certifications"):
+        cv_lines.append("## CERTIFICATIONS")
+        for c in parsed["certifications"]:
+            if str(c).strip():
+                cv_lines.append(f"- {str(c).strip()}")
+        cv_lines.append("")
+
+    if parsed.get("languages"):
+        cv_lines.append("## LANGUAGES")
+        for lang in parsed["languages"]:
+            if str(lang).strip():
+                cv_lines.append(f"- {str(lang).strip()}")
         cv_lines.append("")
 
     cv_markdown = "\n".join(cv_lines).strip()
@@ -1369,6 +2343,8 @@ def _fallback_tailor_pipeline(
         matched_skills=post_scores["matched_skills"],
         injected_keywords=injected_keywords,
         custom_capabilities=custom_capabilities,
+        experience=parsed.get("experience"),
+        projects=parsed.get("projects"),
     )
 
     cv_json = {
@@ -1385,6 +2361,7 @@ def _fallback_tailor_pipeline(
         "projects": parsed["projects"],
         "education": parsed["education"],
         "certifications": parsed["certifications"],
+        "languages": parsed.get("languages", []),
     }
 
     return {
@@ -1685,6 +2662,173 @@ def rank_jobs_batch(
     return scored_jobs, total_in, total_out
 
 
+def _clean_markdown_output(text: str) -> str:
+    """Remove surrounding ```markdown ... ``` code fences if the LLM wrapped its output."""
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```markdown"):
+        cleaned = cleaned[11:]
+    elif cleaned.startswith("```md"):
+        cleaned = cleaned[5:]
+    elif cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
+
+
+def _direct_gemini_tailor_fallback(
+    profile_markdown: str,
+    job_title: str,
+    company: str,
+    job_description: str,
+    custom_capabilities: str,
+    tone: str,
+    api_key: str,
+    model_name: str,
+) -> Optional[Tuple[Dict[str, Any], int, int]]:
+    """Direct Gemini LLM Markdown synthesis fallback modeled on hiring agent final's cv_crew.py."""
+    cv_template_text = get_cv_template(job_description)
+    cl_template_text = get_cover_letter_template()
+    profile_block = (profile_markdown or "").strip()
+    if custom_capabilities and custom_capabilities.strip():
+        profile_block = f"{profile_block}\n\nAdditional Candidate Capabilities:\n{custom_capabilities.strip()}"
+
+    today_str = _format_dd_month_yyyy()
+    cv_prompt = f"""You are a Senior Executive CV Strategist.
+Tailor the user's CV to the specific job description below while strictly maintaining the Markdown template structure.
+
+Candidate Profile:
+{profile_block}
+
+Target Job Details:
+- Title: {job_title}
+- Company: {company}
+- Job Description:
+{job_description}
+
+Template to Follow Strictly:
+{cv_template_text}
+
+Rules:
+1. Preserve ALL personal contact headers (name, location, phone, email, linkedin, github) and all real employers, degrees, and projects from the candidate profile.
+2. Select 2-3 most relevant projects under `## KEY PROJECTS` and align experience and project bullets to the target role using the XYZ formula with quantifiable metrics.
+3. Reframe experience, summary, and skills using JD terminology and closely related analytical/domain concepts without inventing false qualifications or fake tools.
+4. Return ONLY the complete Markdown CV. Do NOT enclose in markdown code fence blocks.
+"""
+
+    cl_prompt = f"""You are an Expert Executive Cover Letter Writer.
+Write a compelling, {tone.lower()} cover letter connecting the candidate's core projects and experience directly to {company}'s requirements.
+
+Candidate Profile:
+{profile_block}
+
+Target Job Details:
+- Title: {job_title}
+- Company: {company}
+- Current Date: {today_str}
+- Job Description:
+{job_description}
+
+Template Structure:
+{cl_template_text}
+
+Rules:
+1. Follow the template structure strictly: Candidate FULL NAME on line 1, pipe-separated contact line on line 2, date ({today_str}), Hiring Manager + {company}, `**Re: {job_title} Application**`, `Dear {company} Hiring Team,`, 4 concise paragraphs, and `Sincerely,\\n\\nFULL NAME`.
+2. Match the requested tone: '{tone}'.
+3. Emphasize key candidate strengths and 1-2 quantified achievements/projects relevant to {company}.
+4. Return ONLY the complete Markdown cover letter. Do NOT enclose in markdown code fence blocks.
+"""
+
+    client = genai.Client(api_key=api_key.strip())
+    in_tok = 0
+    out_tok = 0
+
+    try:
+        cv_res = client.models.generate_content(model=model_name, contents=cv_prompt)
+        cv_markdown = _clean_markdown_output(getattr(cv_res, "text", "") or "")
+        cv_usage = getattr(cv_res, "usage_metadata", None)
+        if cv_usage is not None:
+            in_tok += int(getattr(cv_usage, "prompt_token_count", 0) or 0)
+            out_tok += int(getattr(cv_usage, "candidates_token_count", 0) or 0)
+    except Exception as exc:
+        _raise_if_gemini_auth_error(exc)
+        logger.warning("Direct Gemini CV synthesis fallback failed: %s", exc)
+        return None
+
+    if not cv_markdown:
+        return None
+
+    cover_letter_markdown = ""
+    try:
+        cl_res = client.models.generate_content(model=model_name, contents=cl_prompt)
+        cover_letter_markdown = _clean_markdown_output(getattr(cl_res, "text", "") or "")
+        cl_usage = getattr(cl_res, "usage_metadata", None)
+        if cl_usage is not None:
+            in_tok += int(getattr(cl_usage, "prompt_token_count", 0) or 0)
+            out_tok += int(getattr(cl_usage, "candidates_token_count", 0) or 0)
+    except Exception as exc:
+        _raise_if_gemini_auth_error(exc)
+        logger.warning("Direct Gemini Cover Letter synthesis fallback failed: %s", exc)
+
+    parsed_cv = _fallback_parse_profile(cv_markdown)
+    header = _extract_profile_header(cv_markdown)
+    if header["full_name"] != "Candidate Name":
+        parsed_cv["full_name"] = header["full_name"]
+    contact_line = header["contact_line"] or _extract_profile_header(profile_markdown)["contact_line"]
+
+    injected_keywords = _find_injected_keywords(profile_markdown, cv_markdown, job_description, job_title)
+    scores = _compute_four_scores(cv_markdown, job_title, job_description)
+
+    if not cover_letter_markdown:
+        cover_letter_markdown = _render_tone_cover_letter(
+            candidate_name=parsed_cv["full_name"],
+            contact_line=contact_line,
+            job_title=job_title,
+            company=company,
+            tone=tone,
+            matched_skills=scores["matched_skills"],
+            injected_keywords=injected_keywords,
+            custom_capabilities=custom_capabilities,
+            experience=parsed_cv.get("experience"),
+            projects=parsed_cv.get("projects"),
+        )
+
+    cv_json = {
+        "full_name": parsed_cv["full_name"],
+        "email": parsed_cv["email"],
+        "phone": parsed_cv["phone"],
+        "location": parsed_cv["location"],
+        "linkedin_url": parsed_cv["linkedin_url"],
+        "github_url": parsed_cv["github_url"],
+        "portfolio_url": parsed_cv["portfolio_url"],
+        "summary": parsed_cv["summary"],
+        "skills": parsed_cv["skills"],
+        "experience": parsed_cv["experience"],
+        "projects": parsed_cv["projects"],
+        "education": parsed_cv["education"],
+        "certifications": parsed_cv["certifications"],
+        "languages": parsed_cv.get("languages", []),
+    }
+
+    result = {
+        "cv_markdown": cv_markdown,
+        "cv_json": cv_json,
+        "cover_letter_markdown": cover_letter_markdown,
+        "injected_keywords": injected_keywords,
+        "overall_fit_score": scores["overall_fit_score"],
+        "skills_match_score": scores["skills_match_score"],
+        "experience_fit_score": scores["experience_fit_score"],
+        "ats_keyword_score": scores["ats_keyword_score"],
+        "matched_skills": scores["matched_skills"],
+        "missing_skills": scores["missing_skills"],
+        "match_reason": scores["match_reason"],
+        "recommendation": scores["recommendation"],
+    }
+    if in_tok == 0 and out_tok == 0:
+        in_tok, out_tok = _estimate_tokens(cv_prompt + "\n" + cl_prompt, cv_markdown + "\n" + cover_letter_markdown)
+    return result, in_tok, out_tok
+
+
 def run_application_tailor_pipeline(
     profile_markdown: str,
     job_title: str,
@@ -1713,6 +2857,7 @@ def run_application_tailor_pipeline(
                 tone=effective_tone,
                 api_key=api_key,
                 model_name=resolved_model,
+                job_description=job_description,
             )
             state, in_tok, out_tok = _run_coro_sync(
                 _execute_adk_agent_async(
@@ -1723,29 +2868,35 @@ def run_application_tailor_pipeline(
             )
             cv_bundle = _parse_json_payload(state.get("tailored_cv_bundle"), CVTailorOutput)
             cl_bundle = _parse_json_payload(state.get("tailored_cover_letter"), CoverLetterOutput)
-            if cv_bundle is not None and cv_bundle.cv_markdown.strip():
-                cover_letter_md = (
-                    cl_bundle.cover_letter_markdown.strip()
-                    if cl_bundle and cl_bundle.cover_letter_markdown.strip()
-                    else _render_tone_cover_letter(
-                        candidate_name=cv_bundle.cv_json.full_name or "Candidate",
-                        contact_line="",
-                        job_title=job_title,
-                        company=company,
-                        tone=effective_tone,
-                        matched_skills=cv_bundle.matched_skills,
-                        injected_keywords=cv_bundle.injected_keywords,
-                        custom_capabilities=custom_capabilities,
-                    )
+            if cv_bundle is not None and _clean_markdown_output(cv_bundle.cv_markdown):
+                clean_cv_md = _clean_markdown_output(cv_bundle.cv_markdown)
+                clean_cl_md = (
+                    _clean_markdown_output(cl_bundle.cover_letter_markdown)
+                    if cl_bundle and _clean_markdown_output(cl_bundle.cover_letter_markdown)
+                    else ""
+                )
+                header = _extract_profile_header(profile_markdown)
+                cv_json_dict = cv_bundle.cv_json.model_dump()
+                cover_letter_md = clean_cl_md or _render_tone_cover_letter(
+                    candidate_name=cv_bundle.cv_json.full_name or header["full_name"] or "Candidate",
+                    contact_line=header["contact_line"],
+                    job_title=job_title,
+                    company=company,
+                    tone=effective_tone,
+                    matched_skills=cv_bundle.matched_skills,
+                    injected_keywords=cv_bundle.injected_keywords,
+                    custom_capabilities=custom_capabilities,
+                    experience=cv_json_dict.get("experience"),
+                    projects=cv_json_dict.get("projects"),
                 )
                 injected = list(dict.fromkeys(cv_bundle.injected_keywords))
                 if not injected:
                     injected = _find_injected_keywords(
-                        profile_markdown, cv_bundle.cv_markdown, job_description, job_title
+                        profile_markdown, clean_cv_md, job_description, job_title
                     )
                 result = {
-                    "cv_markdown": cv_bundle.cv_markdown.strip(),
-                    "cv_json": cv_bundle.cv_json.model_dump(),
+                    "cv_markdown": clean_cv_md,
+                    "cv_json": cv_json_dict,
                     "cover_letter_markdown": cover_letter_md,
                     "injected_keywords": injected,
                     "overall_fit_score": _clamp_score(cv_bundle.overall_fit_score),
@@ -1762,7 +2913,20 @@ def run_application_tailor_pipeline(
                 return result, in_tok, out_tok
         except Exception as exc:
             _raise_if_gemini_auth_error(exc)
-            logger.warning("ADK ApplicationTailorPipeline falling back to deterministic synthesis: %s", exc)
+            logger.warning("ADK ApplicationTailorPipeline failed (%s); attempting direct Gemini synthesis.", exc)
+
+        direct_result = _direct_gemini_tailor_fallback(
+            profile_markdown=profile_markdown,
+            job_title=job_title,
+            company=company,
+            job_description=job_description,
+            custom_capabilities=custom_capabilities,
+            tone=effective_tone,
+            api_key=api_key,
+            model_name=resolved_model,
+        )
+        if direct_result is not None:
+            return direct_result
 
     fallback_result = _fallback_tailor_pipeline(
         profile_markdown=profile_markdown,
