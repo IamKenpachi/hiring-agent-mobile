@@ -103,7 +103,7 @@ export default function HomeHubScreen() {
                 style={WEB_SANS}
                 className="text-[18.5px] font-bold tracking-[-0.3px] text-white"
               >
-                Hiring Agent AI
+                Hiring Agent
               </Text>
             </View>
 
@@ -180,7 +180,7 @@ export default function HomeHubScreen() {
                     style={WEB_SANS}
                     className="mt-1 text-[13px] leading-[18.5px] text-[#94A3B8]"
                   >
-                    Search 8 major job boards simultaneously with AI matching
+                    Search 8 major job boards simultaneously with smart role matching
                   </Text>
                 </View>
               </View>
@@ -366,7 +366,7 @@ export default function HomeHubScreen() {
               >
                 <KeyRound size={16} color="#A5B4FC" />
                 <Text style={WEB_SANS} className="text-[13.5px] font-medium text-white">
-                  API Key & Gemini Engine
+                  API Key & Tailoring Mode
                 </Text>
               </Pressable>
 

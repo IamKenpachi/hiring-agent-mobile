@@ -191,7 +191,7 @@ def _execute_hunt_run(
         )
         if raw_jobs and in_tok + out_tok == 0 and not _should_use_fallback_directly(api_key):
             warnings.append(
-                "Gemini AI ranking fell back to local keyword scoring; 0 API tokens were billed."
+                "Live ranking fell back to local keyword scoring; 0 API tokens were billed."
             )
             run.warnings_json = json.dumps(warnings)
         if in_tok + out_tok > 0:

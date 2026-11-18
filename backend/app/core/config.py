@@ -38,57 +38,52 @@ JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))
 
 # === Gemini Model Registry & Pricing (USD per 1M tokens) ===
-DEFAULT_MODEL: str = "gemini-3.7-flash"
+DEFAULT_MODEL: str = "gemini-3.8-flash"
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "gemini-3.7-flash": {
-        "name": "Gemini 3.7 Flash",
-        "description": "Latest Flagship • Maximum intelligence for agentic loops & structured scoring",
-        "badge": "Flagship ⚡",
-        "input_cost_per_m": 0.075,
-        "output_cost_per_m": 0.30,
+    "gemini-3.5-flash-lite": {
+        "name": "Rapid Job Scanner",
+        "description": "Fast & Lightweight • High-speed bulk job screening and quick keyword checks",
+        "badge": "Fast Scan ⚡",
+        "input_cost_per_m": 0.30,
+        "output_cost_per_m": 2.50,
+        "is_default": False,
+    },
+    "gemini-3.8-flash": {
+        "name": "Daily Application Tailor",
+        "description": "Balanced Default • Everyday role matching and full CV & cover letter tailoring",
+        "badge": "Recommended ⭐",
+        "input_cost_per_m": 0.75,
+        "output_cost_per_m": 3.75,
         "is_default": True,
     },
-    "gemini-3.6-flash": {
-        "name": "Gemini 3.6 Flash",
-        "description": "High Performance • Optimized for multi-step agentic workflows & code",
-        "badge": "Agentic 🚀",
-        "input_cost_per_m": 0.075,
-        "output_cost_per_m": 0.30,
+    "gemini-4-hydrogen": {
+        "name": "Career Strategist",
+        "description": "Deep Alignment • Advanced role analysis, impact bullet rewriting, and positioning",
+        "badge": "Deep Fit 🎯",
+        "input_cost_per_m": 1.50,
+        "output_cost_per_m": 7.50,
         "is_default": False,
     },
-    "gemini-3.5-flash": {
-        "name": "Gemini 3.5 Flash",
-        "description": "Fast & Efficient • High-throughput execution and fast extraction",
-        "badge": "Fast ⚡",
-        "input_cost_per_m": 0.075,
-        "output_cost_per_m": 0.30,
+    "gemini-4-argon": {
+        "name": "Executive Headhunter",
+        "description": "Frontier Precision • Maximum depth for competitive, technical, and leadership roles",
+        "badge": "Frontier 🏆",
+        "input_cost_per_m": 2.00,
+        "output_cost_per_m": 10.00,
         "is_default": False,
     },
-    "gemini-3.5-flash-lite": {
-        "name": "Gemini 3.5 Flash-Lite",
-        "description": "Ultra Low Cost • Designed for high-frequency sub-agent scoring",
-        "badge": "Budget 💡",
-        "input_cost_per_m": 0.0375,
-        "output_cost_per_m": 0.15,
-        "is_default": False,
-    },
-    "gemini-3.1-pro-preview": {
-        "name": "Gemini 3.1 Pro Preview",
-        "description": "Frontier Reasoning • Deep context synthesis for executive CV tailoring",
-        "badge": "Frontier 🧠",
-        "input_cost_per_m": 1.25,
-        "output_cost_per_m": 5.00,
-        "is_default": False,
-    },
-    "gemini-2.5-flash": {
-        "name": "Gemini 2.5 Flash",
-        "description": "Balanced Workhorse • High rate-limit stability & reliable throughput",
-        "badge": "Stable 🛡️",
-        "input_cost_per_m": 0.075,
-        "output_cost_per_m": 0.30,
-        "is_default": False,
-    },
+}
+
+LEGACY_MODEL_ALIASES: Dict[str, str] = {
+    "gemini-3.7-flash": "gemini-3.8-flash",
+    "gemini-3.6-flash": "gemini-3.8-flash",
+    "gemini-3.5-flash": "gemini-3.8-flash",
+    "gemini-2.5-flash": "gemini-3.8-flash",
+    "gemini-3.1-pro-preview": "gemini-4-argon",
+    "gemini-2.5-pro": "gemini-4-argon",
+    "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
 }
 
 AVAILABLE_MODELS: List[Dict[str, Any]] = [
@@ -118,6 +113,8 @@ def resolve_gemini_model(model_name: str | None) -> str:
     lowered = cleaned.lower()
     if lowered in MODEL_REGISTRY:
         return lowered
+    if lowered in LEGACY_MODEL_ALIASES:
+        return LEGACY_MODEL_ALIASES[lowered]
 
     for model_id, info in MODEL_REGISTRY.items():
         if info["name"].lower() == lowered:

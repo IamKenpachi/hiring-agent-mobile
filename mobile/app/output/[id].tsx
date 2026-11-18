@@ -34,6 +34,7 @@ import {
 import { COLORS, formatDisplayDate } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError, buildAuthHeaders } from "../../src/lib/api";
+import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { HtmlDocumentViewer } from "../../src/components/HtmlDocumentViewer";
 import { ScoreBadge, ScoreBar } from "../../src/components/ScoreBadge";
 import type { TailoredOutput } from "../../src/types";
@@ -54,7 +55,7 @@ const QUICK_ACTIONS: Array<{ label: string; docType?: "cv" | "cover_letter" }> =
 export default function OutputDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width: windowWidth } = useWindowDimensions();
-  const { selectedModel, refreshTelemetry } = useAuth();
+  const { selectedModel, availableModels, refreshTelemetry } = useAuth();
 
   const [output, setOutput] = useState<TailoredOutput | null>(null);
   const [loading, setLoading] = useState(true);
@@ -244,7 +245,7 @@ export default function OutputDetailScreen() {
           <View style={styles.scoreMiniRow}>
             <ScoreBadge label="Fit" score={output.overall_fit_score} compact />
             <ScoreBadge label="ATS" score={output.ats_keyword_score} compact />
-            <Text style={styles.modelLabel}>{output.model_used}</Text>
+            <Text style={styles.modelLabel}>{resolveModelDisplayName(output.model_used, availableModels)}</Text>
           </View>
         </View>
       </View>
@@ -343,7 +344,7 @@ export default function OutputDetailScreen() {
               </View>
               <Text style={styles.injectedNote}>
                 These missing job description keywords were naturally woven into your CV
-                to maximize ATS alignment. Open AI Revision Copilot if you don't know any
+                to maximize ATS alignment. Open Revision Studio if you don't know any
                 of them and want them removed cleanly.
               </Text>
               <View style={styles.chipWrap}>
@@ -398,7 +399,7 @@ export default function OutputDetailScreen() {
 
             {(output.match_reason || output.recommendation) ? (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>AI Rationale & Strategy</Text>
+                <Text style={styles.cardTitle}>Match Rationale & Strategy</Text>
                 {output.match_reason ? (
                   <Text style={styles.bodyText}>{output.match_reason}</Text>
                 ) : null}
@@ -413,7 +414,7 @@ export default function OutputDetailScreen() {
         </ScrollView>
       </View>
 
-      {/* Bottom Action Bar: Download/Share PDFs + Open AI Revision Copilot */}
+      {/* Bottom Action Bar: Download/Share PDFs + Open Revision Studio */}
       <View style={styles.bottomBar}>
         <View style={styles.pdfRow}>
           <Pressable
@@ -447,12 +448,12 @@ export default function OutputDetailScreen() {
             style={styles.copilotBtn}
           >
             <MessageSquareText size={15} color="#FFFFFF" />
-            <Text style={styles.copilotBtnText}>AI Revise</Text>
+            <Text style={styles.copilotBtnText}>Quick Revise</Text>
           </Pressable>
         </View>
       </View>
 
-      {/* AI Revision Chat Drawer / Modal */}
+      {/* Revision Chat Drawer / Modal */}
       <Modal
         visible={chatOpen}
         animationType="slide"
@@ -473,9 +474,9 @@ export default function OutputDetailScreen() {
                 <Bot size={16} color="#E9D5FF" />
               </View>
               <View>
-                <Text style={styles.drawerTitle}>AI Revision Copilot</Text>
+                <Text style={styles.drawerTitle}>Revision Studio</Text>
                 <Text style={styles.drawerSub}>
-                  {output.job_title} @ {output.company} • {selectedModel}
+                  {output.job_title} @ {output.company} • {resolveModelDisplayName(selectedModel, availableModels)}
                 </Text>
               </View>
             </View>
@@ -551,8 +552,8 @@ export default function OutputDetailScreen() {
               <View style={styles.emptyChat}>
                 <Sparkles size={20} color={COLORS.purple} />
                 <Text style={styles.emptyChatText}>
-                  Ask the AI Copilot to refine bullets, remove injected keywords you don't
-                  know, or change the Cover Letter hook.
+                  Describe how you want to refine bullets, remove injected keywords you don't
+                  know, or adjust the Cover Letter hook.
                 </Text>
               </View>
             ) : (
@@ -598,7 +599,7 @@ export default function OutputDetailScreen() {
               <View style={styles.revisingRow}>
                 <ActivityIndicator size="small" color={COLORS.purple} />
                 <Text style={styles.revisingText}>
-                  Copilot is rewriting & re-scoring your {targetDoc === "cv" ? "CV" : "Cover Letter"}...
+                  Updating & re-scoring your {targetDoc === "cv" ? "CV" : "Cover Letter"}...
                 </Text>
               </View>
             ) : null}
@@ -633,7 +634,7 @@ export default function OutputDetailScreen() {
             <TextInput
               value={chatInput}
               onChangeText={setChatInput}
-              placeholder={`Instruct AI to update ${targetDoc === "cv" ? "CV" : "Cover Letter"}...`}
+              placeholder={`Describe changes for your ${targetDoc === "cv" ? "CV" : "Cover Letter"}...`}
               placeholderTextColor={COLORS.textMuted}
               editable={!revising}
               style={styles.chatInput}

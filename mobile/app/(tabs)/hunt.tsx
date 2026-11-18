@@ -37,6 +37,7 @@ import {
 import { COLORS, getScoreTheme } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import {
   AuthButtonGradient,
   OnboardingAmbientGlow,
@@ -180,7 +181,7 @@ function StepIcon({
 
 export default function HuntScreen() {
   const router = useRouter();
-  const { activeProfile, selectedModel, refreshTelemetry } = useAuth();
+  const { activeProfile, selectedModel, availableModels, refreshTelemetry } = useAuth();
 
   const [stage, setStage] = useState<HuntStage>("config");
   const [query, setQuery] = useState("Data Analyst");
@@ -420,12 +421,12 @@ export default function HuntScreen() {
             : resolveStepState(3) === "failed"
               ? "Stage 3 • Stopped"
               : "Stage 3 • Queued",
-      title: "AI Match & ATS Scoring",
+      title: "Role Match & ATS Scoring",
       subtitle:
         resolveStepState(3) === "done"
           ? "Evaluated Overall Fit, Skills, Experience & ATS (batches of 10)"
           : resolveStepState(3) === "running"
-            ? activeRun?.status_detail || `Scoring roles with ${selectedModel}...`
+            ? activeRun?.status_detail || `Scoring roles with ${resolveModelDisplayName(selectedModel, availableModels)}...`
             : `Evaluates Overall Fit, Skills, Experience & ATS`,
     },
     {
@@ -493,7 +494,7 @@ export default function HuntScreen() {
               </View>
               <View style={styles.modelPill}>
                 <Text style={[styles.modelPillText, WEB_SANS]} numberOfLines={1}>
-                  {selectedModel}
+                  {resolveModelDisplayName(selectedModel, availableModels)}
                 </Text>
               </View>
             </View>
@@ -1021,7 +1022,7 @@ export default function HuntScreen() {
             {/* Emerald Results Banner */}
             <View style={styles.resultsBanner}>
               <Text style={[styles.resultsBannerTitle, WEB_SANS]}>
-                AI-Ranked Job Results
+                Ranked Job Results
               </Text>
               <Text style={[styles.resultsBannerSub, WEB_SANS]}>
                 Ranked top {rankedJobs.length} of{" "}

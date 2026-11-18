@@ -197,30 +197,79 @@ export function wizardDraftToPayload(
   };
 }
 
+export const DEFAULT_MODEL_DISPLAY_NAME = "Daily Application Tailor";
+
+export const LEGACY_MODEL_ID_MAP: Readonly<Record<string, string>> = {
+  "gemini-3.7-flash": "gemini-3.8-flash",
+  "gemini-3.6-flash": "gemini-3.8-flash",
+  "gemini-3.5-flash": "gemini-3.8-flash",
+  "gemini-2.5-flash": "gemini-3.8-flash",
+  "gemini-3.1-pro-preview": "gemini-4-argon",
+  "gemini-2.5-pro": "gemini-4-argon",
+  "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+};
+
+export const CANONICAL_MODEL_DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  "gemini-3.5-flash-lite": "Rapid Job Scanner",
+  "gemini-3.8-flash": "Daily Application Tailor",
+  "gemini-4-hydrogen": "Career Strategist",
+  "gemini-4-argon": "Executive Headhunter",
+};
+
 /**
- * Resolves a human-friendly Gemini model display name from available models,
- * falling back to the normalized model ID or "Gemini 3.7 Flash" when blank.
+ * Normalizes a Gemini model identifier by stripping provider prefixes,
+ * lowercasing, and mapping legacy model IDs to the 4 canonical job-hunting tiers.
  */
-export function resolveModelDisplayName(
-  selectedModel: string,
-  availableModels: ReadonlyArray<Pick<ModelOption, "id" | "name">> = []
-): string {
-  const normalizedModelId = selectedModel?.trim() || "";
-  if (!normalizedModelId) {
-    return "Gemini 3.7 Flash";
+export function normalizeModelId(modelId: string | null | undefined): string {
+  let clean = (modelId ?? "").trim().toLowerCase();
+  while (clean.startsWith("gemini/") || clean.startsWith("models/")) {
+    if (clean.startsWith("gemini/")) {
+      clean = clean.slice("gemini/".length).trim();
+    }
+    if (clean.startsWith("models/")) {
+      clean = clean.slice("models/".length).trim();
+    }
   }
-  const matchedModelName = availableModels
-    .find((m) => m.id === normalizedModelId)
-    ?.name?.trim();
-  return matchedModelName || normalizedModelId;
+  if (!clean) {
+    return "gemini-3.8-flash";
+  }
+  return LEGACY_MODEL_ID_MAP[clean] || clean;
 }
 
 /**
- * Formats the Home Hub active profile & Gemini engine status pill text.
+ * Resolves a human-friendly model tier display name from available models or canonical tiers,
+ * falling back to "Daily Application Tailor" when blank or the trimmed model ID when custom.
+ */
+export function resolveModelDisplayName(
+  selectedModel: string | null | undefined,
+  availableModels: ReadonlyArray<Pick<ModelOption, "id" | "name">> = []
+): string {
+  const rawTrimmed = (selectedModel ?? "").trim();
+  if (!rawTrimmed) {
+    return DEFAULT_MODEL_DISPLAY_NAME;
+  }
+  const normalizedModelId = normalizeModelId(rawTrimmed);
+  const matchedModel =
+    availableModels.find((m) => m.id?.trim() === normalizedModelId) ||
+    availableModels.find((m) => m.id?.trim() === rawTrimmed) ||
+    availableModels.find((m) => normalizeModelId(m.id) === normalizedModelId);
+  const matchedModelName = matchedModel?.name?.trim();
+  if (matchedModelName) {
+    return matchedModelName;
+  }
+  if (normalizedModelId in CANONICAL_MODEL_DISPLAY_NAMES) {
+    return CANONICAL_MODEL_DISPLAY_NAMES[normalizedModelId];
+  }
+  return rawTrimmed;
+}
+
+/**
+ * Formats the Home Hub active profile & tailoring mode status pill text.
  */
 export function formatHomeActiveStatus(
   activeProfile: Pick<Profile, "profile_name" | "full_name"> | null | undefined,
-  selectedModel: string,
+  selectedModel: string | null | undefined,
   availableModels: ReadonlyArray<Pick<ModelOption, "id" | "name">> = []
 ): string {
   const profileLabel =

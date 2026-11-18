@@ -29,6 +29,7 @@ import {
 import { COLORS } from "../src/constants/theme";
 import { useAuth } from "../src/context/AuthContext";
 import { apiClient, ApiError } from "../src/lib/api";
+import { resolveModelDisplayName } from "../src/lib/profileHelpers";
 import {
   MINIMUM_TAILOR_WAIT_MS,
   TAILOR_WITTY_MESSAGES,
@@ -99,7 +100,7 @@ function OrbitalRingSvg({
 
 export default function TailoringScreen() {
   const router = useRouter();
-  const { refreshTelemetry } = useAuth();
+  const { availableModels, refreshTelemetry } = useAuth();
 
   const [request] = useState<PendingTailorRequest | null>(() =>
     getPendingTailorRequest()
@@ -486,7 +487,7 @@ export default function TailoringScreen() {
 
               {/* Main Heading */}
               <Text style={[styles.mainTitle, WEB_SANS]}>
-                AI Agents Tailoring Application...
+                Tailoring Your Application...
               </Text>
 
               {/* Target Role / Company Subtitle */}
@@ -500,7 +501,7 @@ export default function TailoringScreen() {
                   <View style={styles.modelPill}>
                     <Cpu size={12} color="#E9D5FF" />
                     <Text style={[styles.modelPillText, WEB_SANS]}>
-                      {request.model}
+                      {resolveModelDisplayName(request.model, availableModels)}
                     </Text>
                   </View>
                   <View style={styles.tonePill}>

@@ -169,7 +169,7 @@ export default function JobDetailScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={COLORS.indigo} />
-        <Text style={styles.centerText}>Loading AI Match Analysis...</Text>
+        <Text style={styles.centerText}>Loading Job Match Analysis...</Text>
       </View>
     );
   }
@@ -228,7 +228,7 @@ export default function JobDetailScreen() {
 
         {/* 4 Score Bars */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>4-Dimension AI Fit Breakdown</Text>
+          <Text style={styles.sectionTitle}>4-Dimension Fit Breakdown</Text>
           <ScoreBar
             label="Overall Fit"
             score={job.overall_fit_score}
@@ -296,9 +296,9 @@ export default function JobDetailScreen() {
           </View>
         </View>
 
-        {/* AI Rationale & Strategy */}
+        {/* Match Rationale & Strategy */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>AI Match Rationale & Strategy</Text>
+          <Text style={styles.sectionTitle}>Match Rationale & Strategy</Text>
           {job.match_reason ? (
             <View style={styles.callout}>
               <Text style={styles.calloutLabel}>Match Rationale</Text>

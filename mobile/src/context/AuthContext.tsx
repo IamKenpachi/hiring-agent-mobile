@@ -10,6 +10,7 @@ import { Platform } from "react-native";
 import { makeRedirectUri } from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { apiClient, DEFAULT_AVAILABLE_MODELS, syncApiCredentials } from "../lib/api";
+import { normalizeModelId } from "../lib/profileHelpers";
 import { DEFAULT_GEMINI_MODEL, secureStorage } from "../lib/storage";
 import { getSupabaseAuthClient, isGoogleAuthConfigured } from "../lib/supabase";
 import type {
@@ -140,7 +141,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!mounted) return;
         const cleanKey = storedKey || "";
-        const cleanModel = storedModel || DEFAULT_GEMINI_MODEL;
+        const cleanModel = normalizeModelId(storedModel || DEFAULT_GEMINI_MODEL);
+        if (storedModel && storedModel !== cleanModel) {
+          void secureStorage.setSelectedModel(cleanModel).catch(() => {});
+        }
 
         syncApiCredentials({
           token: storedToken,
@@ -393,7 +397,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSelectedModel = useCallback(async (model: string) => {
-    const clean = (model || DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
+    const clean = normalizeModelId(model || DEFAULT_GEMINI_MODEL);
     syncApiCredentials({ model: clean });
     setSelectedModelState(clean);
     try {

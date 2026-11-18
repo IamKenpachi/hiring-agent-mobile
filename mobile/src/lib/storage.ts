@@ -10,7 +10,7 @@ export const STORAGE_KEYS = {
   PENDING_ONBOARDING_DRAFT: "pending_onboarding_draft",
 } as const;
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 async function getRawItem(key: string): Promise<string | null> {
   if (Platform.OS === "web") {

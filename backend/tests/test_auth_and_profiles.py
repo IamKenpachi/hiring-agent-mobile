@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 
 from app.api import profiles as profiles_api
+from app.core.config import DEFAULT_MODEL, resolve_gemini_model
 from app.db.models import Profile, TokenUsage
 from app.main import app
 from app.services.pdf_service import generate_pdf_file
@@ -70,23 +71,41 @@ def test_auth_signup_login_me_and_invalid_token(client: TestClient) -> None:
 def test_validate_gemini_key_and_missing_key_guard(
     client: TestClient, auth_headers: Dict[str, str]
 ) -> None:
+    assert DEFAULT_MODEL == "gemini-3.8-flash"
+    assert resolve_gemini_model(None) == "gemini-3.8-flash"
+    assert resolve_gemini_model("gemini-3.7-flash") == "gemini-3.8-flash"
+    assert resolve_gemini_model("models/gemini-3.6-flash") == "gemini-3.8-flash"
+    assert resolve_gemini_model("gemini-3.5-flash") == "gemini-3.8-flash"
+    assert resolve_gemini_model("gemini-2.5-flash") == "gemini-3.8-flash"
+    assert resolve_gemini_model("gemini-3.1-pro-preview") == "gemini-4-argon"
+    assert resolve_gemini_model("gemini-2.5-pro") == "gemini-4-argon"
+    assert resolve_gemini_model("gemini-3.1-flash-lite") == "gemini-3.5-flash-lite"
+    assert resolve_gemini_model("gemini-2.5-flash-lite") == "gemini-3.5-flash-lite"
+    assert resolve_gemini_model("Career Strategist") == "gemini-4-hydrogen"
+    assert resolve_gemini_model("Executive Headhunter") == "gemini-4-argon"
+
     valid_res = client.post(
         "/api/auth/validate-gemini-key",
-        json={"api_key": "test-valid-gemini-key-98765", "model": "gemini-3.5-flash"},
+        json={"api_key": "test-valid-gemini-key-98765", "model": "gemini-4-hydrogen"},
     )
     assert valid_res.status_code == 200
     payload = valid_res.json()
     assert payload["valid"] is True
-    assert payload["active_model"] == "gemini-3.5-flash"
-    model_ids = {m["id"] for m in payload["models"]}
-    assert {
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
+    assert payload["active_model"] == "gemini-4-hydrogen"
+    model_ids = [m["id"] for m in payload["models"]]
+    assert model_ids == [
         "gemini-3.5-flash-lite",
-        "gemini-3.1-pro-preview",
-        "gemini-2.5-flash",
-    }.issubset(model_ids)
+        "gemini-3.8-flash",
+        "gemini-4-hydrogen",
+        "gemini-4-argon",
+    ]
+
+    legacy_res = client.post(
+        "/api/auth/validate-gemini-key",
+        json={"api_key": "test-valid-gemini-key-98765", "model": "gemini-3.7-flash"},
+    )
+    assert legacy_res.status_code == 200
+    assert legacy_res.json()["active_model"] == "gemini-3.8-flash"
 
     invalid_res = client.post(
         "/api/auth/validate-gemini-key",

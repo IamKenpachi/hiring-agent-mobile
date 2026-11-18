@@ -1,6 +1,6 @@
 # Hiring Agent Mobile
 
-Cross-platform AI career command center built with **Expo (React Native + Expo Router + TypeScript + NativeWind v4)**, **FastAPI**, **Google ADK**, **python-jobspy**, **Playwright Chromium** (with **fpdf2** fallback), and **Supabase** (with local SQLite fallback for offline/development runs).
+Cross-platform career command center built with **Expo (React Native + Expo Router + TypeScript + NativeWind v4)**, **FastAPI**, **Google ADK**, **python-jobspy**, **Playwright Chromium** (with **fpdf2** fallback), and **Supabase** (with local SQLite fallback for offline/development runs).
 
 ---
 
@@ -13,7 +13,7 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |                                                                         |
 |  • (auth)/welcome     Welcome Screen ("Get Started" / "Sign In")        |
 |  • (auth)/login       Email/Password & Continue with Google (PKCE OAuth) |
-|  • (auth)/onboarding  Step 1: Gemini Key (SecureStore) + AI Engine Grid |
+|  • (auth)/onboarding  Step 1: Gemini API Key (SecureStore) + Mode Grid |
 |                       Step 2: Pre-Auth PDF CV Parser (4-Section Review) |
 |                               OR 4-Step Questionnaire Wizard            |
 |  • home               Post-Login Home Hub (Live Status Pill, Hunter,      |
@@ -21,11 +21,11 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  • (tabs)/hunt        3-Stage JobSpy Hunter (Config -> Live -> Results)   |
 |  • job/[id]           4-Score Fit Audit + Formatted JD + Copy + Tailor  |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
-|  • tailoring          Animated AI Wait Screen (7s Min + Witty Quips)    |
+|  • tailoring          Animated Tailoring Wait Screen (7s Min + Quips)   |
 |  • (tabs)/outputs     Saved Outputs + Fit/ATS Badges + Delete Modal     |
 |  • output/[id]        3-Slide Carousel (CV / Cover Letter / Keywords)   |
-|                       + AI Revision Copilot + A4 PDF Download/Share     |
-|  • (tabs)/settings    Multi-Profile Manager, Key Check, Model Switcher  |
+|                       + Revision Studio + A4 PDF Download/Share         |
+|  • (tabs)/settings    Multi-Profile Manager, Key Check, Tailoring Mode  |
 |                       & Telemetry                                       |
 +------------------------------------+------------------------------------+
                                      | HTTP / SSE + Bearer JWT
@@ -61,16 +61,16 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 
 ---
 
-## Supported Gemini Models
+## Tailoring Modes (Supported Gemini Models)
 
-- `gemini-3.7-flash` *(Default — Flagship)*
-- `gemini-3.6-flash` *(Agentic)*
-- `gemini-3.5-flash` *(Fast)*
-- `gemini-3.5-flash-lite` *(Budget)*
-- `gemini-3.1-pro-preview` *(Frontier)*
-- `gemini-2.5-flash` *(Stable)*
+| Mode Name | Model Handle | Badge | Pricing (In / Out per 1M) | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Rapid Job Scanner** | `gemini-3.5-flash-lite` | `Fast Scan ⚡` | $0.30 / $2.50 | High-speed bulk job screening and quick keyword checks |
+| **Daily Application Tailor** *(Default)* | `gemini-3.8-flash` | `Recommended ⭐` | $0.75 / $3.75 | Balanced everyday role matching and full CV & cover letter tailoring |
+| **Career Strategist** | `gemini-4-hydrogen` | `Deep Fit 🎯` | $1.50 / $7.50 | Deep role analysis, impact bullet rewriting, and positioning |
+| **Executive Headhunter** | `gemini-4-argon` | `Frontier 🏆` | $2.00 / $10.00 | Maximum reasoning depth for competitive, technical, and leadership roles |
 
-Users supply their own Gemini API key during onboarding (`expo-secure-store` on iOS/Android, `localStorage` on Web), transmitted per request via `X-Gemini-Api-Key` and `X-Gemini-Model`.
+Users supply their own Gemini API key during onboarding (`expo-secure-store` on iOS/Android, `localStorage` on Web), transmitted per request via `X-Gemini-Api-Key` and `X-Gemini-Model`. Both the backend (`resolve_gemini_model`) and mobile app (`normalizeModelId` / `resolveModelDisplayName`) map legacy model IDs (`gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`, `gemini-2.5-pro`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`) seamlessly to these 4 tiers for stored sessions, saved outputs, and telemetry.
 
 ---
 
@@ -78,7 +78,7 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 
 ### 3-Screen JobSpy Hunt Flow (`(tabs)/hunt`)
 1. **Hunt Configuration**: Choose role query, location, search radius, work type, posting recency, Top-N results count, and multi-select primary/regional JobSpy platforms.
-2. **Live Execution Progress**: Streams live backend progress (SSE on Web, polling fallback on native) across 4 distinct stages — **Multi-Board JobSpy Scraping**, **Deduplication & Normalization**, **AI Match & ATS Scoring**, and **Ranking Top Matches** — with partial-board warnings, failure recovery controls, and a **Show Results →** transition CTA upon completion.
+2. **Live Execution Progress**: Streams live backend progress (SSE on Web, polling fallback on native) across 4 distinct stages — **Multi-Board JobSpy Scraping**, **Deduplication & Normalization**, **Role Match & ATS Scoring**, and **Ranking Top Matches** — with partial-board warnings, failure recovery controls, and a **Show Results →** transition CTA upon completion.
 3. **Top Ranked Matches**: Displays sorted job match cards with `Overall Fit`, `Skills`, `Experience`, and `ATS` score badges linking straight to `job/[id]`.
 
 ### Executive CV & Cover Letter Generation + Vector PDFs
@@ -91,10 +91,12 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 - **Animated Tailoring Waiting Page (`mobile/app/tailoring.tsx`, `tailorSession.ts`)**: Shared dedicated screen for both Instant Tailor Studio and Job Match Analysis featuring orbital ring animations, a 7-second minimum display timer, rotating witty status quips, `AbortSignal` cancellation, and retry/back error handling.
 - **Saved Outputs Delete (`(tabs)/outputs`, `DELETE /api/outputs/{output_id}`)**: Per-card trash button and dark confirmation modal removing both the saved `TailoredOutput` record and its generated PDF directory on disk.
 
-### Dynamic Home Hub Pill, Instant Model Switching & Session Persistence
-- **Live Active Profile & Model Pill (`mobile/app/home.tsx`, `profileHelpers.ts`)**: `formatHomeActiveStatus` and `resolveModelDisplayName` dynamically render the user's active career profile and friendly Gemini model name (`Active Profile: <Profile> • <Model>`).
-- **Optimistic Instant Model Switching (`AuthContext.tsx`, `(tabs)/settings`)**: `setSelectedModel` updates API headers and React state before persisting to device storage, paired with an active-model pill badge, helper copy, and inline confirmation banner in Settings so model changes apply immediately without re-validating the API key.
-- **Key & Model Preservation on Sign-Out (`mobile/src/lib/storage.ts`)**: `clearAuthSession()` clears only `auth_token` and `pending_onboarding_draft`, keeping `gemini_api_key` and `selected_model` intact across sign-outs.
+### Tailoring Modes, Natural Career UX & Session Persistence
+- **4 Job-Hunting Tailoring Tiers (`backend/app/core/config.py`, `mobile/src/lib/api.ts`, `profileHelpers.ts`)**: Replaced raw technical model names with job-hunting tiers (**Rapid Job Scanner**, **Daily Application Tailor**, **Career Strategist**, **Executive Headhunter**) backed by `gemini-3.5-flash-lite`, `gemini-3.8-flash` (default), `gemini-4-hydrogen`, and `gemini-4-argon`, plus automatic legacy ID normalization across Home, Onboarding, Hunt, Studio, Tailoring, Saved Outputs, Revision Studio, and Telemetry.
+- **Natural Career & Job-Hunting Copy (`mobile/app/`, `mobile/src/components/`)**: Removed technical buzzwords (`"AI"`, `"Agent"`, `"Copilot"`, `"Intelligence"`) across user-facing headings, buttons, and descriptions (`"Hiring Agent"`, `"4-Dimension Fit Breakdown"`, `"Match Rationale & Strategy"`, `"Quick Revise"`, `"Revision Studio"`), retaining `"Gemini API Key"` only on API key input and validation flows.
+- **Live Active Profile & Mode Pill (`mobile/app/home.tsx`, `profileHelpers.ts`)**: `formatHomeActiveStatus` and `resolveModelDisplayName` dynamically render the user's active career profile and friendly tailoring mode (`Active Profile: <Profile> • <Mode>`).
+- **Optimistic Instant Mode Switching (`AuthContext.tsx`, `(tabs)/settings`)**: `setSelectedModel` updates API headers and React state before persisting to device storage, paired with an active-mode pill badge, helper copy, and inline confirmation banner in Settings so changes apply immediately without re-validating the API key.
+- **Key & Mode Preservation on Sign-Out (`mobile/src/lib/storage.ts`)**: `clearAuthSession()` clears only `auth_token` and `pending_onboarding_draft`, keeping `gemini_api_key` and `selected_model` intact across sign-outs.
 
 ### Live Key Verification, Error Handling & Telemetry Accuracy
 - **Live Gemini Key Validation**: `/api/auth/validate-gemini-key` defaults to `verify_live=True`, rejecting placeholders and invalid keys (`API_KEY_INVALID`) against Google Gemini before saving in Onboarding or Settings (with inline error banners in both screens).

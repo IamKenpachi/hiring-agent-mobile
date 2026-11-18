@@ -48,9 +48,9 @@ from app.templates.cv_templates import (
 
 def test_google_adk_agent_composition() -> None:
     """Confirm Google ADK LlmAgent and SequentialAgent hierarchy is wired properly."""
-    parser_agent = create_profile_parser_agent(api_key="test-key-1234", model_name="gemini-3.7-flash")
-    jd_agent = create_jd_extractor_agent(api_key="test-key-1234", model_name="gemini-3.7-flash")
-    matcher_agent = create_job_matcher_agent(api_key="test-key-1234", model_name="gemini-3.5-flash")
+    parser_agent = create_profile_parser_agent(api_key="test-key-1234", model_name="gemini-3.8-flash")
+    jd_agent = create_jd_extractor_agent(api_key="test-key-1234", model_name="gemini-3.8-flash")
+    matcher_agent = create_job_matcher_agent(api_key="test-key-1234", model_name="gemini-3.5-flash-lite")
     rev_agent = create_revision_copilot_agent(doc_type="cv", api_key="test-key-1234")
     pipeline = create_application_tailor_pipeline(tone="Technical & Direct", api_key="test-key-1234")
 
@@ -89,7 +89,7 @@ Requirements:
     extract_res = client.post(
         "/api/studio/extract-jd",
         headers=auth_headers,
-        json={"raw_text": sample_jd, "model": "gemini-3.6-flash"},
+        json={"raw_text": sample_jd, "model": "gemini-3.5-flash-lite"},
     )
     assert extract_res.status_code == 200, extract_res.text
     jd_meta = extract_res.json()
@@ -109,7 +109,7 @@ Requirements:
             "job_description": sample_jd,
             "custom_capabilities": "Mentored 3 junior analysts on SQL quality checks.",
             "tone": "Technical & Direct",
-            "model": "gemini-3.7-flash",
+            "model": "gemini-3.8-flash",
         },
     )
     assert tailor_res.status_code == 200, tailor_res.text
@@ -162,7 +162,7 @@ Requirements:
         json={
             "doc_type": "cv",
             "instruction": "Remove injected keywords I don't know",
-            "model": "gemini-3.5-flash",
+            "model": "gemini-4-hydrogen",
         },
     )
     assert revise_cv_res.status_code == 200, revise_cv_res.text
@@ -209,8 +209,8 @@ Requirements:
     assert tel["total_tokens"] == tel["input_tokens"] + tel["output_tokens"]
     assert tel["est_cost_usd"] > 0
     assert tel["est_cost_formatted"].startswith("$")
-    assert "gemini-3.7-flash" in tel["per_model"]
-    assert len(tel["available_models"]) == 6
+    assert "gemini-3.8-flash" in tel["per_model"]
+    assert len(tel["available_models"]) == 4
 
 
 def test_studio_tailor_auto_extracts_missing_title_and_company(
@@ -491,9 +491,9 @@ KARIM FAIQ"""
         company="Monzo",
         job_description="Seeking Data Analyst with SQL, Python, and dbt.",
         api_key="AIzaSyFakeLiveKeyForDirectFallbackTest12345",
-        model_name="gemini-3.7-flash",
+        model_name="gemini-3.8-flash",
     )
-    assert len(calls) == 2
+    assert calls == ["gemini-3.8-flash", "gemini-3.8-flash"]
     assert in_tok == 640 and out_tok == 420
     assert not result["cv_markdown"].startswith("```")
     assert "dbt" in result["injected_keywords"]

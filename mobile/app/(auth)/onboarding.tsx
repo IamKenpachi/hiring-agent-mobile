@@ -33,26 +33,27 @@ import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
 import {
   createEmptyWizardDraft,
+  normalizeModelId,
   previewToWizardDraft,
+  resolveModelDisplayName,
   wizardDraftToPayload,
   type WizardDraftState,
 } from "../../src/lib/profileHelpers";
-import type { ModelOption } from "../../src/types";
 
 type OnboardingSubStep = "api" | "method" | "parser" | "wizard";
 
 const MOCKUP_PRIMARY_MODEL_ORDER = [
-  "gemini-3.7-flash",
+  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.1-pro-preview",
-  "gemini-2.5-flash",
+  "gemini-4-hydrogen",
+  "gemini-4-argon",
 ];
 
 function getBadgeStyle(modelId: string): {
   pillClass: string;
   textClass: string;
 } {
-  if (modelId.includes("3.7")) {
+  if (modelId.includes("3.8")) {
     return {
       pillClass: "bg-[#6D28D9]/35 border-[#8B5CF6]/45",
       textClass: "text-[#DDD6FE]",
@@ -64,27 +65,22 @@ function getBadgeStyle(modelId: string): {
       textClass: "text-[#6EE7B7]",
     };
   }
-  if (modelId.includes("pro")) {
-    return {
-      pillClass: "bg-[#9D174D]/30 border-[#EC4899]/40",
-      textClass: "text-[#FBCFE8]",
-    };
-  }
-  if (modelId.includes("2.5")) {
+  if (modelId.includes("hydrogen")) {
     return {
       pillClass: "bg-[#0369A1]/30 border-[#38BDF8]/40",
       textClass: "text-[#BAE6FD]",
+    };
+  }
+  if (modelId.includes("argon")) {
+    return {
+      pillClass: "bg-[#9D174D]/30 border-[#EC4899]/40",
+      textClass: "text-[#FBCFE8]",
     };
   }
   return {
     pillClass: "bg-[#4338CA]/30 border-[#818CF8]/40",
     textClass: "text-[#C7D2FE]",
   };
-}
-
-function formatDisplayModelName(model: ModelOption): string {
-  if (model.id === "gemini-3.1-pro-preview") return "Gemini 3.1 Pro";
-  return model.name;
 }
 
 export default function OnboardingScreen() {
@@ -106,7 +102,7 @@ export default function OnboardingScreen() {
     token && geminiApiKey.trim() && profiles.length === 0 ? "method" : "api"
   );
   const [apiKeyInput, setApiKeyInput] = useState(geminiApiKey || "");
-  const [modelInput, setModelInput] = useState(selectedModel || "gemini-3.7-flash");
+  const [modelInput, setModelInput] = useState(() => normalizeModelId(selectedModel));
   const [showKey, setShowKey] = useState(false);
   const [keyVerified, setKeyVerified] = useState(Boolean(geminiApiKey.trim()));
   const [showAllModels, setShowAllModels] = useState(false);
@@ -242,7 +238,7 @@ export default function OnboardingScreen() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Failed to extract CV with Gemini.";
+            : "Failed to extract CV details from file.";
       setError(msg);
     } finally {
       setParsingPdf(false);
@@ -331,7 +327,7 @@ export default function OnboardingScreen() {
       <StepProgressHeader
         label={
           subStep === "api"
-            ? "Step 1 of 2 • Intelligence Setup"
+            ? "Step 1 of 2 • Workspace Setup"
             : "Step 2 of 2 • Career Profile"
         }
         totalSteps={2}
@@ -429,9 +425,9 @@ export default function OnboardingScreen() {
               </Text>
             </View>
 
-            {/* Active AI Engine 2x2 -> 2x3 grid */}
+            {/* Tailoring Mode 2x2 grid */}
             <Text style={WEB_SANS} className="text-[14px] font-semibold text-white mb-2.5">
-              Select Active AI Engine
+              Select Tailoring Mode
             </Text>
 
             <View className="flex-row flex-wrap justify-between gap-y-2.5">
@@ -454,7 +450,7 @@ export default function OnboardingScreen() {
                       numberOfLines={2}
                       className="text-[13.5px] font-bold leading-[18px] text-white"
                     >
-                      {formatDisplayModelName(model)}
+                      {resolveModelDisplayName(model.id, availableModels)}
                     </Text>
 
                     {model.badge ? (
@@ -574,7 +570,7 @@ export default function OnboardingScreen() {
                   style={WEB_SANS}
                   className="mt-2.5 text-center text-[11.5px] leading-[16px] text-[#94A3B8]"
                 >
-                  AI extracts your experience, skills, and education in 5 seconds
+                  Extracts your experience, skills, and education in seconds
                 </Text>
               </View>
 

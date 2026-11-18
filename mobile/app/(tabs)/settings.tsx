@@ -74,7 +74,7 @@ export default function SettingsScreen() {
   const handleSelectModel = (modelId: string) => {
     void setSelectedModel(modelId);
     setModelMessage(
-      `Active engine switched to ${resolveModelDisplayName(modelId, availableModels)} — ready immediately across Home, Hunt & Studio.`
+      `Tailoring mode switched to ${resolveModelDisplayName(modelId, availableModels)} — ready immediately across Home, Hunt & Studio.`
     );
   };
 
@@ -214,7 +214,9 @@ export default function SettingsScreen() {
             <Text style={styles.subLabel}>PER-MODEL BREAKDOWN</Text>
             {perModelEntries.map(([modelId, stats]) => (
               <View key={modelId} style={styles.modelStatRow}>
-                <Text style={styles.modelStatName}>{modelId}</Text>
+                <Text style={styles.modelStatName}>
+                  {resolveModelDisplayName(modelId, availableModels)}
+                </Text>
                 <Text style={styles.modelStatVal}>
                   {stats.total_tokens.toLocaleString()} tok • {stats.calls} calls
                   {typeof stats.est_cost_usd === "number"
@@ -233,7 +235,7 @@ export default function SettingsScreen() {
             {tokenTelemetry.recent_operations.slice(0, 4).map((op, idx) => (
               <View key={op.id || idx} style={styles.modelStatRow}>
                 <Text style={styles.modelStatName}>
-                  {op.operation_type} ({op.model_name})
+                  {op.operation_type} ({resolveModelDisplayName(op.model_name, availableModels)})
                 </Text>
                 <Text style={styles.modelStatVal}>
                   {op.input_tokens + op.output_tokens} tok •{" "}
@@ -400,14 +402,14 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
-      {/* Active Gemini Model Picker */}
+      {/* Active Tailoring Mode Picker */}
       <View style={styles.card}>
         <View style={styles.modelHeader}>
           <View style={styles.rowBetween}>
             <View style={[styles.titleIconRow, styles.modelHeaderLeft]}>
               <Cpu size={17} color={COLORS.indigo} />
               <Text style={[styles.sectionTitle, styles.modelHeaderTitle]}>
-                Active Gemini Intelligence Model
+                Active Tailoring Mode
               </Text>
             </View>
             <View style={styles.activeModelBadge}>
@@ -421,7 +423,7 @@ export default function SettingsScreen() {
             </View>
           </View>
           <Text style={styles.modelHelperText}>
-            Tap any model to switch immediately — no key re-validation required.
+            Tap any mode to switch immediately — no key re-validation required.
           </Text>
         </View>
 

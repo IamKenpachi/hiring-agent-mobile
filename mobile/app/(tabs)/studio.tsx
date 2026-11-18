@@ -25,6 +25,7 @@ import {
 import { COLORS } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { setPendingTailorRequest } from "../../src/lib/tailorSession";
 
 const SAMPLE_JDS = [
@@ -78,7 +79,7 @@ const TONES = [
 
 export default function StudioScreen() {
   const router = useRouter();
-  const { activeProfile, selectedModel, refreshTelemetry } = useAuth();
+  const { activeProfile, selectedModel, availableModels, refreshTelemetry } = useAuth();
 
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
@@ -236,7 +237,7 @@ export default function StudioScreen() {
             ) : null}
 
             <View style={styles.modelPill}>
-              <Text style={styles.modelPillText}>{selectedModel}</Text>
+              <Text style={styles.modelPillText}>{resolveModelDisplayName(selectedModel, availableModels)}</Text>
             </View>
           </View>
         </View>

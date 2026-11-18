@@ -450,7 +450,7 @@ export function ProfileWizardView({
                       next[idx] = { ...next[idx], name: v };
                       onChange({ ...draft, projects: next });
                     }}
-                    placeholder="Autonomous AI Job Hunter"
+                    placeholder="Customer Churn Analytics Pipeline"
                     placeholderTextColor="#475569"
                     className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
                   />
@@ -509,7 +509,7 @@ export function ProfileWizardView({
                       next[idx] = { ...next[idx], description: v };
                       onChange({ ...draft, projects: next });
                     }}
-                    placeholder="Multi-agent ATS resume optimizer and job ranker."
+                    placeholder="Automated executive KPI reporting and cohort retention dashboards."
                     placeholderTextColor="#475569"
                     multiline
                     className="min-h-[54px] rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[12.5px] text-white"

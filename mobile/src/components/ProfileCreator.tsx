@@ -322,10 +322,9 @@ export function ProfileCreator({
 
       {mode === "pdf" ? (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>AI-Powered CV PDF Parser</Text>
+          <Text style={styles.sectionTitle}>CV PDF Parser</Text>
           <Text style={styles.helperText}>
-            Upload an existing PDF, Markdown, or TXT resume. Our Google ADK ProfileParserAgent
-            extracts your skills, work history, projects, and education automatically.
+            Upload an existing PDF, Markdown, or TXT resume to extract your skills, work history, projects, and education automatically.
           </Text>
 
           <View style={styles.fieldGroup}>
@@ -372,7 +371,7 @@ export function ProfileCreator({
                 <CheckCircle2 size={16} color="#FFFFFF" />
               )}
               <Text style={styles.primaryBtnText}>
-                {loading ? "Parsing CV with Gemini..." : "Parse & Save Profile"}
+                {loading ? "Extracting CV Details..." : "Parse & Save Profile"}
               </Text>
             </Pressable>
           </View>

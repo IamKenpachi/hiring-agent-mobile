@@ -151,7 +151,7 @@ export function OnboardingScreenFrame({
 }
 
 /**
- * Luminous outlined briefcase + central white 4-point sparkle for Screen 1 ("Hiring Agent AI").
+ * Luminous outlined briefcase + central white 4-point sparkle for Screen 1 ("Hiring Agent").
  */
 export function AuthHeroBriefcase({ size = 84 }: { size?: number }) {
   const strokeId = useSvgId("caseStroke");

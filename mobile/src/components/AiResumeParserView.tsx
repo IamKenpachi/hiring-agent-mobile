@@ -103,7 +103,7 @@ export function AiResumeParserView({
           style={WEB_SANS}
           className="text-center text-[22px] font-bold tracking-[-0.4px] text-white mb-6"
         >
-          AI Resume Parser
+          Resume Parser
         </Text>
 
         {/* Extracted file banner */}
@@ -119,7 +119,7 @@ export function AiResumeParserView({
             <View className="mt-1.5 self-start flex-row items-center gap-1 rounded-full border border-[#10B981]/35 bg-[#10B981]/15 px-2.5 py-0.5">
               <CheckCircle2 size={11} color="#34D399" />
               <Text style={WEB_SANS} className="text-[11px] font-semibold text-[#34D399]">
-                Extracted by Gemini
+                Resume Details Extracted
               </Text>
             </View>
           </View>

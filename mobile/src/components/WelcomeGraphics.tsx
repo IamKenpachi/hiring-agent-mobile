@@ -45,7 +45,7 @@ export function WelcomeAmbientGlow() {
 }
 
 /**
- * Thin-stroke outline briefcase with integrated 4-point AI sparkle star,
+ * Thin-stroke outline briefcase with integrated 4-point sparkle star,
  * matching welcome_screen_mockup_2K.jpg proportions and clean star cutout.
  */
 export function BriefcaseSparkIcon({

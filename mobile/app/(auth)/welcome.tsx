@@ -42,7 +42,7 @@ export default function WelcomeScreen() {
               style={WEB_SANS}
               className="mt-3.5 text-center text-[15px] font-normal leading-[21px] tracking-[-0.1px] text-[#9298AA]"
             >
-              {"Your AI career command center for\njob ranking and ATS-ready CVs."}
+              {"Your career command center for\nsmart job ranking and ATS-ready CVs."}
             </Text>
           </View>
 

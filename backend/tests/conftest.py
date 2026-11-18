@@ -83,7 +83,7 @@ def auth_headers(client: TestClient) -> Dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
         "X-Gemini-Api-Key": "test-gemini-key-offline-123456",
-        "X-Gemini-Model": "gemini-3.7-flash",
+        "X-Gemini-Model": "gemini-3.8-flash",
     }
 
 

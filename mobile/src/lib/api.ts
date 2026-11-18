@@ -55,52 +55,36 @@ export const API_BASE_URL = resolveApiBaseUrl();
 
 export const DEFAULT_AVAILABLE_MODELS: ModelOption[] = [
   {
-    id: "gemini-3.7-flash",
-    name: "Gemini 3.7 Flash",
-    description: "Flagship workhorse for agentic loops & structured scoring",
-    badge: "Flagship ⚡",
-    input_cost_per_m: 0.075,
-    output_cost_per_m: 0.3,
-  },
-  {
-    id: "gemini-3.6-flash",
-    name: "Gemini 3.6 Flash",
-    description: "Optimized for multi-step agentic workflows & web parsing",
-    badge: "Agentic 🚀",
-    input_cost_per_m: 0.075,
-    output_cost_per_m: 0.3,
-  },
-  {
-    id: "gemini-3.5-flash",
-    name: "Gemini 3.5 Flash",
-    description: "Fast & cost-effective high-throughput execution",
-    badge: "Fast ⚡",
-    input_cost_per_m: 0.075,
-    output_cost_per_m: 0.3,
-  },
-  {
     id: "gemini-3.5-flash-lite",
-    name: "Gemini 3.5 Flash-Lite",
-    description: "Ultra low latency & budget for bulk sub-agent scoring",
-    badge: "Budget 💡",
-    input_cost_per_m: 0.0375,
-    output_cost_per_m: 0.15,
+    name: "Rapid Job Scanner",
+    description: "Fast & Lightweight • High-speed bulk job screening and quick keyword checks",
+    badge: "Fast Scan ⚡",
+    input_cost_per_m: 0.3,
+    output_cost_per_m: 2.5,
   },
   {
-    id: "gemini-3.1-pro-preview",
-    name: "Gemini 3.1 Pro Preview",
-    description: "Frontier deep reasoning for executive CV tailoring",
-    badge: "Frontier 🧠",
-    input_cost_per_m: 1.25,
-    output_cost_per_m: 5.0,
+    id: "gemini-3.8-flash",
+    name: "Daily Application Tailor",
+    description: "Balanced Default • Everyday role matching and full CV & cover letter tailoring",
+    badge: "Recommended ⭐",
+    input_cost_per_m: 0.75,
+    output_cost_per_m: 3.75,
   },
   {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    description: "Balanced workhorse with high rate-limit stability",
-    badge: "Stable 🛡️",
-    input_cost_per_m: 0.075,
-    output_cost_per_m: 0.3,
+    id: "gemini-4-hydrogen",
+    name: "Career Strategist",
+    description: "Deep Alignment • Advanced role analysis, impact bullet rewriting, and positioning",
+    badge: "Deep Fit 🎯",
+    input_cost_per_m: 1.5,
+    output_cost_per_m: 7.5,
+  },
+  {
+    id: "gemini-4-argon",
+    name: "Executive Headhunter",
+    description: "Frontier Precision • Maximum depth for competitive, technical, and leadership roles",
+    badge: "Frontier 🏆",
+    input_cost_per_m: 2.0,
+    output_cost_per_m: 10.0,
   },
 ];
 
@@ -618,7 +602,7 @@ export const apiClient = {
     });
   },
 
-  // --- Saved Outputs & AI Revision ---
+  // --- Saved Outputs & Revision Studio ---
   async listOutputs(): Promise<TailoredOutputSummary[]> {
     return request<TailoredOutputSummary[]>("/api/outputs");
   },

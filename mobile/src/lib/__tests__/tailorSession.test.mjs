@@ -44,11 +44,11 @@ test("setPendingTailorRequest, getPendingTailorRequest, and clearPendingTailorRe
       company: "Monzo",
       job_description: "Build scalable dbt models and dashboards in Snowflake.",
       tone: "Modern & Impactful",
-      model: "gemini-3.7-flash",
+      model: "gemini-3.8-flash",
     },
     jobTitle: "Senior Data Analyst",
     company: "Monzo",
-    model: "gemini-3.7-flash",
+    model: "gemini-3.8-flash",
     tone: "Modern & Impactful",
   };
 
@@ -63,11 +63,11 @@ test("setPendingTailorRequest, getPendingTailorRequest, and clearPendingTailorRe
     payload: {
       tone: "Technical & Direct",
       custom_capabilities: "Kafka + Airflow",
-      model: "gemini-3.6-flash",
+      model: "gemini-4-hydrogen",
     },
     jobTitle: "Analytics Engineer",
     company: "Revolut",
-    model: "gemini-3.6-flash",
+    model: "gemini-4-hydrogen",
     tone: "Technical & Direct",
   };
 
@@ -180,10 +180,10 @@ test("getOrStartTailorRun deduplicates across StrictMode unmount+remount and sup
   const req = {
     source: "job",
     jobId: "job-strict",
-    payload: { tone: "Modern & Impactful", model: "gemini-3.7-flash" },
+    payload: { tone: "Modern & Impactful", model: "gemini-3.8-flash" },
     jobTitle: "Data Scientist",
     company: "Stripe",
-    model: "gemini-3.7-flash",
+    model: "gemini-3.8-flash",
     tone: "Modern & Impactful",
   };
   setPendingTailorRequest(req);

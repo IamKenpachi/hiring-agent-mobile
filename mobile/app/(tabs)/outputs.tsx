@@ -23,12 +23,15 @@ import {
   X,
 } from "lucide-react-native";
 import { COLORS, formatDisplayDate } from "../../src/constants/theme";
+import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { ScoreBadge } from "../../src/components/ScoreBadge";
 import type { TailoredOutputSummary } from "../../src/types";
 
 export default function OutputsScreen() {
   const router = useRouter();
+  const { availableModels } = useAuth();
   const [outputs, setOutputs] = useState<TailoredOutputSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -199,7 +202,7 @@ export default function OutputsScreen() {
 
                 <View style={styles.metaBadge}>
                   <Cpu size={11.5} color={COLORS.indigo} />
-                  <Text style={styles.metaText}>{item.model_used || "gemini-3.7-flash"}</Text>
+                  <Text style={styles.metaText}>{resolveModelDisplayName(item.model_used, availableModels)}</Text>
                 </View>
               </View>
 

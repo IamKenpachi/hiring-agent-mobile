@@ -148,7 +148,7 @@ export default function LoginScreen() {
               style={WEB_SANS}
               className="text-center text-[28px] font-bold tracking-[-0.6px] text-white"
             >
-              Hiring Agent AI
+              Hiring Agent
             </Text>
             <Text
               style={WEB_SANS}
@@ -286,7 +286,7 @@ export default function LoginScreen() {
             ) : (
               <Pressable onPress={() => router.replace("/(auth)/onboarding")} className="py-2">
                 <Text style={WEB_SANS} className="text-[12.5px] text-[#94A3B8]">
-                  New to Hiring Agent AI?{" "}
+                  New to Hiring Agent?{" "}
                   <Text className="font-semibold text-[#A5B4FC]">Get Started</Text>
                 </Text>
               </Pressable>
