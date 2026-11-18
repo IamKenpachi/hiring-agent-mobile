@@ -1,6 +1,8 @@
 import type {
   EducationItem,
   ExperienceItem,
+  ModelOption,
+  Profile,
   ProfileCreatePayload,
   ProfilePreviewResponse,
   ProjectItem,
@@ -193,4 +195,39 @@ export function wizardDraftToPayload(
     education,
     certifications: [],
   };
+}
+
+/**
+ * Resolves a human-friendly Gemini model display name from available models,
+ * falling back to the normalized model ID or "Gemini 3.7 Flash" when blank.
+ */
+export function resolveModelDisplayName(
+  selectedModel: string,
+  availableModels: ReadonlyArray<Pick<ModelOption, "id" | "name">> = []
+): string {
+  const normalizedModelId = selectedModel?.trim() || "";
+  if (!normalizedModelId) {
+    return "Gemini 3.7 Flash";
+  }
+  const matchedModelName = availableModels
+    .find((m) => m.id === normalizedModelId)
+    ?.name?.trim();
+  return matchedModelName || normalizedModelId;
+}
+
+/**
+ * Formats the Home Hub active profile & Gemini engine status pill text.
+ */
+export function formatHomeActiveStatus(
+  activeProfile: Pick<Profile, "profile_name" | "full_name"> | null | undefined,
+  selectedModel: string,
+  availableModels: ReadonlyArray<Pick<ModelOption, "id" | "name">> = []
+): string {
+  const profileLabel =
+    activeProfile?.profile_name?.trim() ||
+    activeProfile?.full_name?.trim() ||
+    "Default Profile";
+  const modelLabel = resolveModelDisplayName(selectedModel, availableModels);
+
+  return `Active Profile: ${profileLabel} • ${modelLabel}`;
 }

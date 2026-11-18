@@ -28,6 +28,7 @@ import {
   WEB_SANS,
 } from "../src/components/OnboardingGraphics";
 import { useAuth } from "../src/context/AuthContext";
+import { formatHomeActiveStatus } from "../src/lib/profileHelpers";
 
 const GLASS_CARD_STYLE =
   Platform.OS === "web"
@@ -60,7 +61,15 @@ const CTA_GLOW_STYLE =
 
 export default function HomeHubScreen() {
   const router = useRouter();
-  const { user, profiles, activeProfile, activateProfile, signOut } = useAuth();
+  const {
+    user,
+    profiles,
+    activeProfile,
+    selectedModel,
+    availableModels,
+    activateProfile,
+    signOut,
+  } = useAuth();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   const handleOpenSettings = () => {
@@ -112,7 +121,7 @@ export default function HomeHubScreen() {
             accessibilityRole="button"
             accessibilityLabel="Active Profile Settings"
             onPress={() => router.push("/(tabs)/settings")}
-            className="mt-4 flex-row items-center justify-center gap-2 self-center rounded-full border border-white/15 bg-white/[0.045] px-4 py-2 active:bg-white/[0.09]"
+            className="mt-4 max-w-[92%] flex-row items-center justify-center gap-2 self-center rounded-full border border-white/15 bg-white/[0.045] px-4 py-2 active:bg-white/[0.09]"
           >
             <View
               style={
@@ -122,14 +131,15 @@ export default function HomeHubScreen() {
                     } as unknown as Record<string, string>)
                   : undefined
               }
-              className="h-2.5 w-2.5 rounded-full bg-[#22C55E]"
+              className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#22C55E]"
             />
             <Text
               style={WEB_SANS}
               numberOfLines={1}
-              className="max-w-[300px] text-[12px] font-medium text-[#CBD5E1]"
+              ellipsizeMode="tail"
+              className="min-w-0 shrink text-[12px] font-medium text-[#CBD5E1]"
             >
-              Active Profile: Senior Data Analyst • Gemini 3.7 Flash
+              {formatHomeActiveStatus(activeProfile, selectedModel, availableModels)}
             </Text>
           </Pressable>
         </View>

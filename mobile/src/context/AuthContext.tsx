@@ -393,10 +393,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSelectedModel = useCallback(async (model: string) => {
-    const clean = model || DEFAULT_GEMINI_MODEL;
-    await secureStorage.setSelectedModel(clean);
+    const clean = (model || DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
     syncApiCredentials({ model: clean });
     setSelectedModelState(clean);
+    try {
+      await secureStorage.setSelectedModel(clean);
+    } catch {
+      // Keep optimistic in-memory model selection if device storage write fails
+    }
   }, []);
 
   const activateProfile = useCallback(

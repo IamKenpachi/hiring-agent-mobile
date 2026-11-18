@@ -16,8 +16,8 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  • (auth)/onboarding  Step 1: Gemini Key (SecureStore) + AI Engine Grid |
 |                       Step 2: Pre-Auth PDF CV Parser (4-Section Review) |
 |                               OR 4-Step Questionnaire Wizard            |
-|  • home               Post-Login Home Hub (Hunter, Studio, History,     |
-|                       Master Profiles, & Account Menu)                  |
+|  • home               Post-Login Home Hub (Live Status Pill, Hunter,      |
+|                       Studio, History, Master Profiles & Account Menu)    |
 |  • (tabs)/hunt        3-Stage JobSpy Hunter (Config -> Live -> Results)   |
 |  • job/[id]           4-Score Fit Audit + Formatted JD + Copy + Tailor  |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
@@ -25,7 +25,8 @@ Cross-platform AI career command center built with **Expo (React Native + Expo R
 |  • (tabs)/outputs     Saved Outputs + Fit/ATS Badges + Delete Modal     |
 |  • output/[id]        3-Slide Carousel (CV / Cover Letter / Keywords)   |
 |                       + AI Revision Copilot + A4 PDF Download/Share     |
-|  • (tabs)/settings    Multi-Profile Manager, Live Key Check & Telemetry |
+|  • (tabs)/settings    Multi-Profile Manager, Key Check, Model Switcher  |
+|                       & Telemetry                                       |
 +------------------------------------+------------------------------------+
                                      | HTTP / SSE + Bearer JWT
                                      | + X-Gemini-Api-Key + X-Gemini-Model
@@ -89,6 +90,11 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 - **Formatted JD Reader & Copy (`mobile/src/lib/descriptionParser.ts`, `job/[id]`)**: Normalizes JobSpy scraping whitespace/escapes and wrapped bullets into clean headings, bullet lists, and inline bold/italic spans, with a top-right **Copy** button (`expo-clipboard` + web fallback) and `"Copied!"` check feedback.
 - **Animated Tailoring Waiting Page (`mobile/app/tailoring.tsx`, `tailorSession.ts`)**: Shared dedicated screen for both Instant Tailor Studio and Job Match Analysis featuring orbital ring animations, a 7-second minimum display timer, rotating witty status quips, `AbortSignal` cancellation, and retry/back error handling.
 - **Saved Outputs Delete (`(tabs)/outputs`, `DELETE /api/outputs/{output_id}`)**: Per-card trash button and dark confirmation modal removing both the saved `TailoredOutput` record and its generated PDF directory on disk.
+
+### Dynamic Home Hub Pill, Instant Model Switching & Session Persistence
+- **Live Active Profile & Model Pill (`mobile/app/home.tsx`, `profileHelpers.ts`)**: `formatHomeActiveStatus` and `resolveModelDisplayName` dynamically render the user's active career profile and friendly Gemini model name (`Active Profile: <Profile> • <Model>`).
+- **Optimistic Instant Model Switching (`AuthContext.tsx`, `(tabs)/settings`)**: `setSelectedModel` updates API headers and React state before persisting to device storage, paired with an active-model pill badge, helper copy, and inline confirmation banner in Settings so model changes apply immediately without re-validating the API key.
+- **Key & Model Preservation on Sign-Out (`mobile/src/lib/storage.ts`)**: `clearAuthSession()` clears only `auth_token` and `pending_onboarding_draft`, keeping `gemini_api_key` and `selected_model` intact across sign-outs.
 
 ### Live Key Verification, Error Handling & Telemetry Accuracy
 - **Live Gemini Key Validation**: `/api/auth/validate-gemini-key` defaults to `verify_live=True`, rejecting placeholders and invalid keys (`API_KEY_INVALID`) against Google Gemini before saving in Onboarding or Settings (with inline error banners in both screens).
@@ -156,7 +162,7 @@ pytest -v
 ### Mobile Unit Tests & TypeScript Verification
 ```bash
 cd mobile
-node --test src/lib/__tests__/descriptionParser.test.mjs src/lib/__tests__/tailorSession.test.mjs
+node --test src/lib/__tests__/profileHelpers.test.mjs src/lib/__tests__/descriptionParser.test.mjs src/lib/__tests__/tailorSession.test.mjs
 npx tsc --noEmit
 ```
 

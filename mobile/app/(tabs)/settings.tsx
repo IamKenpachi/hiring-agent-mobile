@@ -28,6 +28,7 @@ import {
 import { COLORS, formatDisplayDate } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { apiClient, ApiError } from "../../src/lib/api";
+import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { ModelPickerList } from "../../src/components/ModelPickerList";
 import { ProfileCreator } from "../../src/components/ProfileCreator";
 import type { Profile } from "../../src/types";
@@ -53,6 +54,7 @@ export default function SettingsScreen() {
   const [savingKey, setSavingKey] = useState(false);
   const [keyMessage, setKeyMessage] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [modelMessage, setModelMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -63,10 +65,18 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       setApiKeyInput(geminiApiKey);
+      setModelMessage(null);
       void refreshTelemetry();
       void refreshProfiles();
     }, [geminiApiKey, refreshTelemetry, refreshProfiles])
   );
+
+  const handleSelectModel = (modelId: string) => {
+    void setSelectedModel(modelId);
+    setModelMessage(
+      `Active engine switched to ${resolveModelDisplayName(modelId, availableModels)} — ready immediately across Home, Hunt & Studio.`
+    );
+  };
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
@@ -392,15 +402,42 @@ export default function SettingsScreen() {
 
       {/* Active Gemini Model Picker */}
       <View style={styles.card}>
-        <View style={styles.titleIconRow}>
-          <Cpu size={17} color={COLORS.indigo} />
-          <Text style={styles.sectionTitle}>Active Gemini Intelligence Model</Text>
+        <View style={styles.modelHeader}>
+          <View style={styles.rowBetween}>
+            <View style={[styles.titleIconRow, styles.modelHeaderLeft]}>
+              <Cpu size={17} color={COLORS.indigo} />
+              <Text style={[styles.sectionTitle, styles.modelHeaderTitle]}>
+                Active Gemini Intelligence Model
+              </Text>
+            </View>
+            <View style={styles.activeModelBadge}>
+              <Text
+                style={styles.activeModelBadgeText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {resolveModelDisplayName(selectedModel, availableModels)}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.modelHelperText}>
+            Tap any model to switch immediately — no key re-validation required.
+          </Text>
         </View>
+
+        {modelMessage ? (
+          <View style={[styles.successBanner, styles.successBannerRow]}>
+            <CheckCircle2 size={15} color={COLORS.emerald} />
+            <Text style={[styles.successText, styles.successBannerText]}>
+              {modelMessage}
+            </Text>
+          </View>
+        ) : null}
 
         <ModelPickerList
           models={availableModels}
           selectedModel={selectedModel}
-          onSelect={(modelId) => void setSelectedModel(modelId)}
+          onSelect={handleSelectModel}
         />
       </View>
 
@@ -734,10 +771,49 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     padding: 9,
   },
+  successBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   successText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#6EE7B7",
+  },
+  successBannerText: {
+    flex: 1,
+  },
+  modelHeader: {
+    gap: 5,
+  },
+  modelHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  modelHeaderTitle: {
+    flexShrink: 1,
+  },
+  activeModelBadge: {
+    flexShrink: 1,
+    maxWidth: "48%",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.indigoSoft,
+    borderWidth: 1,
+    borderColor: COLORS.indigoBorder,
+  },
+  activeModelBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#C7D2FE",
+    flexShrink: 1,
+  },
+  modelHelperText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.textSecondary,
   },
   saveKeyBtn: {
     flexDirection: "row",
