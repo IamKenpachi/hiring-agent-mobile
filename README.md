@@ -9,15 +9,15 @@ Cross-platform career command center built with **Expo (React Native + Expo Rout
 ```text
 +-------------------------------------------------------------------------+
 |                    EXPO CROSS-PLATFORM APP (mobile/)                    |
-|  iOS • Android • Web (Expo Router + NativeWind v4 + Dark Executive Theme)|
+|  Android-First • iOS • Web (Expo Router + NativeWind v4 + Dark/Light)   |
 |                                                                         |
 |  • (auth)/welcome     Welcome Screen ("Get Started" / "Sign In")        |
 |  • (auth)/login       Email/Password & Continue with Google (PKCE OAuth) |
-|  • (auth)/onboarding  Step 1: Gemini API Key (SecureStore) + Mode Grid |
+|  • (auth)/onboarding  Step 1: Gemini Key / Starter Mode + Privacy Link  |
 |                       Step 2: Pre-Auth PDF CV Parser (4-Section Review) |
 |                               OR 4-Step Questionnaire Wizard            |
-|  • home               Post-Login Home Hub (Live Status Pill, Hunter,      |
-|                       Studio, History, Master Profiles & Account Menu)    |
+|  • home               Post-Login Home Hub (Theme Toggle, Live Pill,     |
+|                       Hunter, Studio, Outputs & Account Menu)           |
 |  • (tabs)/hunt        3-Stage JobSpy Hunter (Config -> Live -> Results)   |
 |  • job/[id]           4-Score Fit Audit + Formatted JD + Copy + Tailor  |
 |  • (tabs)/studio      Instant Tailor Studio + Auto-Extract JD + Tone    |
@@ -25,28 +25,29 @@ Cross-platform career command center built with **Expo (React Native + Expo Rout
 |  • (tabs)/outputs     Saved Outputs + Fit/ATS Badges + Delete Modal     |
 |  • output/[id]        3-Slide Carousel (CV / Cover Letter / Keywords)   |
 |                       + Revision Studio + A4 PDF Download/Share         |
-|  • (tabs)/settings    Multi-Profile Manager, Key Check, Tailoring Mode  |
-|                       & Telemetry                                       |
+|  • (tabs)/settings    Profiles, Key/Starter Status, Appearance,         |
+|                       Privacy Policy, Delete Account & Telemetry        |
 +------------------------------------+------------------------------------+
                                      | HTTP / SSE + Bearer JWT
                                      | + X-Gemini-Api-Key + X-Gemini-Model
                                      v
 +-------------------------------------------------------------------------+
-|                      FASTAPI + GOOGLE ADK (backend/)                    |
+|                 FASTAPI + GOOGLE ADK DOCKER (backend/)                  |
 |                                                                         |
-|  • /api/auth          Signup, Login, /me, Live Gemini Key validation    |
+|  • /api/auth          Signup, Login, /me, Live Key Check, Delete Account|
 |  • /api/profiles      Multi-Profile CRUD + /parse-preview + ParserAgent |
 |  • /api/hunt          8-Board JobSpy Scraper + 4-Stage SSE + Matcher    |
 |  • /api/studio        JDExtractorAgent + ApplicationTailorPipeline      |
-|  • /api/outputs       Saved Outputs (CRUD, Delete + PDF Cleanup, PDFs)  |
+|  • /api/outputs       Saved Outputs + Supabase Storage PDFs + PDF Gen   |
 |  • /api/telemetry     Real-Time Token I/O & USD Cost Telemetry          |
+|  • /legal/*           Play / App Store Privacy & Account Deletion HTML  |
 +------------------------------------+------------------------------------+
-                                     | SQLAlchemy 2.0 ORM
+                                     | SQLAlchemy 2.0 ORM + Supavisor TLS
                                      v
 +-------------------------------------------------------------------------+
 |                 SUPABASE POSTGRESQL / LOCAL SQLITE (supabase/)          |
 |  • profiles • search_runs • ranked_jobs • tailored_outputs • token_usage|
-|  • Row-Level Security (auth.uid() = user_id) & outputs-pdfs bucket      |
+|  • Optimized (select auth.uid()) RLS policies & private outputs-pdfs    |
 +-------------------------------------------------------------------------+
 ```
 
@@ -103,15 +104,26 @@ Users supply their own Gemini API key during onboarding (`expo-secure-store` on 
 - **Explicit Auth Errors (`401`) & Clean Fallbacks**: Invalid/expired Gemini API keys raise `GeminiAuthError` rather than falling back silently; interactive routes return HTTP `401` JSON with CORS headers intact, and background hunts surface failure details on the Progress screen. Transient non-auth live fallbacks log zero phantom tokens (`record_token_usage` skipped when `0` tokens are returned).
 - **Safe Resume Parsing & PostgreSQL Integrity**: `CatchAllExceptionMiddleware` preserves `Access-Control-Allow-Origin` headers on unexpected `500` JSON responses, `/api/profiles/upload-pdf` and `/api/profiles/parse-preview` normalize PDF ligature glyphs (`fi`/`fl`/`ffi`), strip `\x00` NUL bytes, and execute synchronously off the event loop, and profile creation + token telemetry commit atomically.
 
+### Dark & Light Theme System, Android UI & Revision Studio UX
+- **Reactive Dark & Light Mode (`mobile/src/constants/theme.ts`, `ThemeContext.tsx`, `ThemeToggleButton.tsx`)**: Defaults to Dark Obsidian (`#090D16`) and switches cleanly in one tap to Tailwind Slate + Indigo Light Mode (`#F8FAFC` canvas, `#FFFFFF` cards, `#0F172A` ink) via the persistent top-bar toggle button or **Settings → Appearance**, preserved across sign-outs (`THEME_MODE` in device storage).
+- **Android Edge-to-Edge Safe Areas & NativeWind v4 `<Pressable>` Fix**: Uses `useSafeAreaInsets()` so bottom tab bars (`(tabs)/_layout.tsx`) and sticky action bars (`job/[id]`, `output/[id]`) clear Android's system navigation bar, replaces all functional `style={({ pressed }) => ...}` callbacks on `<Pressable>` with static styles + `active:opacity-*` (`nativewindSafety.test.mjs`), and drops deprecated `StatusBar` `backgroundColor`.
+- **Revision Studio Modal UX (`app/output/[id].tsx`, `mobile/src/lib/revisionChat.ts`)**: Measures Android `<Modal>` window insets via `computeAndroidModalKeyboardInset()` so the prompt bar stays cleanly above the software keyboard, shows your submitted prompt immediately via optimistic `buildDisplayedChatHistory()` above the progress indicator (restoring typed text on error), supports multiline expanding input, and renders `**bold**` / `*italic*` markdown cleanly via `parseChatMessageLines()`.
+
+### Production Hardening, Store Compliance & Cloud Delivery
+- **Backend Security, Quotas & Rate Limiting (`config.py`, `security.py`, `rate_limit.py`, `main.py`)**: Enforces strong `JWT_SECRET` and explicit `CORS_ORIGINS` (`validate_production_config()`) under `ENVIRONMENT=production`, disables unauthenticated dev fallback in prod, verifies Supabase `ES256`/`RS256` JWKS tokens alongside HS256, applies `SlowAPIMiddleware` (`120/minute` default, `10/minute` signup/login, `15/hour` hunts), adds security headers + request IDs, and recovers stale in-flight `SearchRun` rows on startup.
+- **Starter Mode, Account Deletion & Legal Pages (`auth.py`, `legal.py`, `AuthContext.tsx`)**: Supports both personal **Gemini API Key (BYOK)** and rate-limited **Starter Mode (No Key Required)** (`DEMO_TRIAL_MAX_CALLS_PER_USER=15`, HTTP `402` on exhaustion), refreshes Supabase JWTs automatically via `onAuthStateChange`, serves Play/App Store compliance HTML at `GET /legal/privacy` and `GET /legal/account-deletion`, and cascades user/PDF/Supabase Auth & Storage deletion via `DELETE /api/auth/account` (`Settings → Delete Account`).
+- **Cloud Container, Supavisor Pooler & Persistent PDFs (`Dockerfile`, `railway.toml`, `session.py`, `outputs.py`, `jobspy_service.py`)**: Runs non-root `python:3.11-slim-bookworm` with Playwright Chromium (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`), optional `JOBSPY_PROXY_URL`, PostgreSQL `prepare_threshold=None` for Supavisor/PgBouncer, and best-effort `outputs-pdfs` Supabase Storage upload/restore/delete across container restarts.
+- **Android Build, EAS Update & CI (`app.json`, `eas.json`, `.github/workflows/ci.yml`)**: Configures `com.hiringagent.mobile` store PNG assets, EAS `development` / `preview` (APK) / `production` (AAB) profiles with `expo-updates` OTA channels (`preview`, `production`), Sentry crash reporting hooks, and GitHub Actions CI for backend `pytest` + mobile lint/typecheck/tests/Android export.
+
 ---
 
 ## Setup Instructions
 
 ### 1. Supabase Auth, Database & Storage
 1. Create a Supabase project.
-2. Open the **SQL Editor** and run `supabase/migrations/001_initial_schema.sql` to create `profiles`, `search_runs`, `ranked_jobs`, `tailored_outputs`, `token_usage`, RLS policies (`auth.uid() = user_id`), and the private `outputs-pdfs` storage bucket.
-3. Configure `DATABASE_URL` (Session Pooler URI, percent-encoding any special characters in the password), `SUPABASE_URL`, `SUPABASE_KEY` (secret/service key), `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_JWT_SECRET` in `backend/.env`.
-   - When `SUPABASE_URL` and `SUPABASE_KEY` are set, `/api/auth/signup`, `/api/auth/login`, and `/api/auth/me` proxy directly to **Supabase Auth** (with immediate post-signup login and `ES256`/`HS256` JWT validation).
+2. Open the **SQL Editor** and run `supabase/migrations/001_initial_schema.sql` followed by `supabase/migrations/002_production_hardening.sql` to create `profiles`, `search_runs`, `ranked_jobs`, `tailored_outputs`, `token_usage`, optimized `(select auth.uid())` RLS policies, covering FK indexes, and the private `outputs-pdfs` storage bucket.
+3. Configure `DATABASE_URL` (Supabase Session/Transaction Pooler URI, percent-encoding any special characters in the password), `SUPABASE_URL`, `SUPABASE_KEY` (secret/service key), `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_JWT_SECRET` in `backend/.env`.
+   - When `SUPABASE_URL` and `SUPABASE_KEY` are set, `/api/auth/signup`, `/api/auth/login`, and `/api/auth/me` proxy directly to **Supabase Auth** (with `ES256`/`RS256` JWKS and `HS256` JWT validation).
    - If `DATABASE_URL` or Supabase keys are omitted (and in `pytest`), the backend falls back to local SQLite (`sqlite:///./data/hiring_mobile.db`) and local JWTs.
 
 ### 2. FastAPI + Google ADK Backend (`backend/`)
@@ -137,19 +149,30 @@ cd mobile
 npm install
 cp .env.example .env
 ```
-Edit `mobile/.env` if running on an emulator or physical device:
+Edit `mobile/.env` to set your backend and Supabase URLs:
+- Production / Cloud Backend: `EXPO_PUBLIC_API_URL=https://<your-railway-domain>`
 - Web / iOS Simulator: `EXPO_PUBLIC_API_URL=http://localhost:8001`
 - Android Emulator: `EXPO_PUBLIC_API_URL=http://10.0.2.2:8001`
 - Physical Device (Expo Go): `EXPO_PUBLIC_API_URL=http://<YOUR_LAN_IP>:8001`
 
 Start Expo:
 ```bash
-npx expo start
+npx expo start --tunnel   # recommended on LAN-isolated Wi-Fi
 # Or launch directly on Web / Android / iOS:
 npm run web
 npm run android
 npm run ios
 ```
+
+### 4. Production Deployment (Railway + Expo EAS)
+- **Backend (Railway)**: Deploy `backend/` using [Dockerfile](backend/Dockerfile) and [railway.toml](backend/railway.toml) (`ENVIRONMENT=production`, strong `JWT_SECRET`, explicit `CORS_ORIGINS`, `ALLOWED_HOSTS` including your Railway domain & `healthcheck.railway.app`, Supabase pooler `DATABASE_URL`, and `SUPABASE_*` vars).
+- **Android Builds & OTA Updates (`mobile/`)**:
+  ```bash
+  cd mobile
+  npx eas build --platform android --profile preview     # installable internal test APK
+  npx eas build --platform android --profile production  # Play Store AAB
+  npx eas update --channel preview --platform android --environment preview -m "<summary>"
+  ```
 
 ---
 
@@ -158,13 +181,16 @@ npm run ios
 ### Backend (`pytest`)
 ```bash
 cd backend
-pytest -v
+pytest -q
 ```
 
-### Mobile Unit Tests & TypeScript Verification
+### Mobile Unit Tests, Lint, TypeScript & Android Bundle
 ```bash
 cd mobile
-node --test src/lib/__tests__/profileHelpers.test.mjs src/lib/__tests__/descriptionParser.test.mjs src/lib/__tests__/tailorSession.test.mjs
+node --test "src/lib/__tests__/*.test.mjs"
 npx tsc --noEmit
+npx expo lint
+npx expo-doctor
+npx expo export --platform android --output-dir ./dist-android-check
 ```
 
