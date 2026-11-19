@@ -52,6 +52,8 @@ function resolveApiBaseUrl(): string {
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
+export const PRIVACY_POLICY_URL = `${API_BASE_URL}/legal/privacy`;
+export const ACCOUNT_DELETION_URL = `${API_BASE_URL}/legal/account-deletion`;
 
 export const DEFAULT_AVAILABLE_MODELS: ModelOption[] = [
   {
@@ -326,6 +328,12 @@ export const apiClient = {
 
   async getMe(): Promise<User> {
     return request<User>("/api/auth/me");
+  },
+
+  async deleteAccount(): Promise<{ deleted: boolean; user_id?: string }> {
+    return request<{ deleted: boolean; user_id?: string }>("/api/auth/account", {
+      method: "DELETE",
+    });
   },
 
   async validateGeminiKey(

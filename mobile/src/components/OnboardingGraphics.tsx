@@ -12,6 +12,7 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 import { ArrowLeft } from "lucide-react-native";
+import { useTheme } from "../context/ThemeContext";
 
 export const WEB_SANS =
   Platform.OS === "web"
@@ -21,9 +22,10 @@ export const WEB_SANS =
       }
     : undefined;
 
-function useSvgId(prefix: string): string {
+function useSvgId(prefix: string, isDark?: boolean): string {
   const raw = useId();
-  return `${prefix}-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const modeSuffix = typeof isDark === "boolean" ? `-${isDark ? "d" : "l"}` : "";
+  return `${prefix}${modeSuffix}-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 }
 
 /**
@@ -31,15 +33,16 @@ function useSvgId(prefix: string): string {
  * Uses a globally unique gradient ID so stacked Expo Router screens never collide in web DOM.
  */
 export function AuthButtonGradient() {
-  const gradId = useSvgId("btnGrad");
+  const { isDark } = useTheme();
+  const gradId = useSvgId("btnGrad", isDark);
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
       <Svg width="100%" height="100%" viewBox="0 0 345 50" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor="#6366F1" />
-            <Stop offset="50%" stopColor="#7C5DFA" />
-            <Stop offset="100%" stopColor="#9353F6" />
+            <Stop offset="0%" stopColor={isDark ? "#6366F1" : "#4F46E5"} />
+            <Stop offset="50%" stopColor={isDark ? "#7C5DFA" : "#6366F1"} />
+            <Stop offset="100%" stopColor={isDark ? "#9353F6" : "#7C3AED"} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="345" height="50" fill={`url(#${gradId})`} />
@@ -49,18 +52,31 @@ export function AuthButtonGradient() {
 }
 
 /**
- * Dark frosted metallic-glass pill surface for the "Continue with Google" CTA matching google_auth_mockup.jpg.
+ * Frosted glass pill surface for the "Continue with Google" CTA in Dark and Light modes.
  */
 export function GoogleButtonSurface() {
-  const glassGradId = useSvgId("googleGlass");
+  const { isDark } = useTheme();
+  const glassGradId = useSvgId("googleGlass", isDark);
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
       <Svg width="100%" height="100%" viewBox="0 0 345 50" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id={glassGradId} x1="25%" y1="0%" x2="75%" y2="100%">
-            <Stop offset="0%" stopColor="#3B425C" stopOpacity="0.82" />
-            <Stop offset="42%" stopColor="#1D2235" stopOpacity="0.92" />
-            <Stop offset="100%" stopColor="#101423" stopOpacity="0.98" />
+            <Stop
+              offset="0%"
+              stopColor={isDark ? "#3B425C" : "#FFFFFF"}
+              stopOpacity={isDark ? "0.82" : "1"}
+            />
+            <Stop
+              offset={isDark ? "42%" : "55%"}
+              stopColor={isDark ? "#1D2235" : "#F8FAFC"}
+              stopOpacity={isDark ? "0.92" : "1"}
+            />
+            <Stop
+              offset="100%"
+              stopColor={isDark ? "#101423" : "#F1F5F9"}
+              stopOpacity={isDark ? "0.98" : "1"}
+            />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="345" height="50" fill={`url(#${glassGradId})`} />
@@ -101,7 +117,8 @@ export function GoogleGIcon({ size = 20 }: { size?: number }) {
  * Ambient radial violet-indigo top glow used behind Screen 1 and subtle Step headers.
  */
 export function OnboardingAmbientGlow({ strong = false }: { strong?: boolean }) {
-  const haloId = useSvgId(strong ? "haloStrong" : "haloSubtle");
+  const { colors, isDark } = useTheme();
+  const haloId = useSvgId(strong ? "haloStrong" : "haloSubtle", isDark);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Svg
@@ -119,9 +136,17 @@ export function OnboardingAmbientGlow({ strong = false }: { strong?: boolean }) 
             ry={strong ? "175" : "150"}
             gradientUnits="userSpaceOnUse"
           >
-            <Stop offset="0%" stopColor="#6D5CE8" stopOpacity={strong ? "0.62" : "0.28"} />
-            <Stop offset="45%" stopColor="#3B357A" stopOpacity={strong ? "0.28" : "0.14"} />
-            <Stop offset="100%" stopColor="#070A12" stopOpacity="0" />
+            <Stop
+              offset="0%"
+              stopColor={colors.haloPrimary}
+              stopOpacity={isDark ? (strong ? "0.62" : "0.28") : strong ? "0.22" : "0.14"}
+            />
+            <Stop
+              offset="45%"
+              stopColor={colors.haloSecondary}
+              stopOpacity={isDark ? (strong ? "0.28" : "0.14") : strong ? "0.11" : "0.07"}
+            />
+            <Stop offset="100%" stopColor={colors.haloFade} stopOpacity="0" />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="393" height="420" fill={`url(#${haloId})`} />
@@ -140,8 +165,9 @@ export function OnboardingScreenFrame({
   children: React.ReactNode;
   strongGlow?: boolean;
 }) {
+  const { colors } = useTheme();
   return (
-    <View className="flex-1 bg-[#070A12] items-center">
+    <View className="flex-1 items-center" style={{ backgroundColor: colors.authBg }}>
       <View className="flex-1 w-full max-w-[430px] relative overflow-hidden">
         <OnboardingAmbientGlow strong={strongGlow} />
         <SafeAreaView className="flex-1">{children}</SafeAreaView>
@@ -151,22 +177,23 @@ export function OnboardingScreenFrame({
 }
 
 /**
- * Luminous outlined briefcase + central white 4-point sparkle for Screen 1 ("Hiring Agent").
+ * Luminous outlined briefcase + central 4-point sparkle for Screen 1 ("Hiring Agent").
  */
 export function AuthHeroBriefcase({ size = 84 }: { size?: number }) {
-  const strokeId = useSvgId("caseStroke");
-  const fillId = useSvgId("caseFill");
+  const { isDark } = useTheme();
+  const strokeId = useSvgId("caseStroke", isDark);
+  const fillId = useSvgId("caseFill", isDark);
   return (
     <Svg width={size} height={size * 0.85} viewBox="0 0 88 74" fill="none">
       <Defs>
         <LinearGradient id={strokeId} x1="16" y1="12" x2="72" y2="62" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#818CF8" />
-          <Stop offset="50%" stopColor="#A78BFA" />
-          <Stop offset="100%" stopColor="#60A5FA" />
+          <Stop offset="0%" stopColor={isDark ? "#818CF8" : "#4F46E5"} />
+          <Stop offset="50%" stopColor={isDark ? "#A78BFA" : "#7C3AED"} />
+          <Stop offset="100%" stopColor={isDark ? "#60A5FA" : "#0284C7"} />
         </LinearGradient>
         <LinearGradient id={fillId} x1="20" y1="18" x2="68" y2="60" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#6366F1" stopOpacity="0.22" />
-          <Stop offset="100%" stopColor="#9333EA" stopOpacity="0.14" />
+          <Stop offset="0%" stopColor="#6366F1" stopOpacity={isDark ? "0.22" : "0.14"} />
+          <Stop offset="100%" stopColor="#9333EA" stopOpacity={isDark ? "0.14" : "0.08"} />
         </LinearGradient>
       </Defs>
 
@@ -200,21 +227,21 @@ export function AuthHeroBriefcase({ size = 84 }: { size?: number }) {
         strokeLinecap="round"
       />
 
-      {/* Center white 4-point sparkle */}
+      {/* Center 4-point sparkle */}
       <Path
         d="M44 31C44.9 37.8 47.2 40.1 54 41C47.2 41.9 44.9 44.2 44 51C43.1 44.2 40.8 41.9 34 41C40.8 40.1 43.1 37.8 44 31Z"
-        fill="#FFFFFF"
+        fill={isDark ? "#FFFFFF" : "#4F46E5"}
       />
 
       {/* Top accent sparkles */}
       <Path
         d="M17 9L17.9 12.1L21 13L17.9 13.9L17 17L16.1 13.9L13 13L16.1 12.1L17 9Z"
-        fill="#E0E7FF"
+        fill={isDark ? "#E0E7FF" : "#4F46E5"}
       />
       <Path
         d="M25 6L25.5 7.8L27.3 8.3L25.5 8.8L25 10.6L24.5 8.8L22.7 8.3L24.5 7.8L25 6Z"
-        fill="#C7D2FE"
-        fillOpacity="0.8"
+        fill={isDark ? "#C7D2FE" : "#7C3AED"}
+        fillOpacity={isDark ? "0.8" : "0.75"}
       />
     </Svg>
   );
@@ -224,30 +251,32 @@ export function AuthHeroBriefcase({ size = 84 }: { size?: number }) {
  * Glowing document with sparkle icon for Step 2 left card ("Upload Existing PDF CV").
  */
 export function UploadDocumentSparkIcon({ size = 56 }: { size?: number }) {
-  const docGradId = useSvgId("docGrad");
+  const { isDark } = useTheme();
+  const docGradId = useSvgId("docGrad", isDark);
+  const lineColor = isDark ? "#C7D2FE" : "#4F46E5";
   return (
     <Svg width={size} height={size} viewBox="0 0 60 60" fill="none">
       <Defs>
         <LinearGradient id={docGradId} x1="12" y1="8" x2="48" y2="52" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#818CF8" />
-          <Stop offset="100%" stopColor="#A855F7" />
+          <Stop offset="0%" stopColor={isDark ? "#818CF8" : "#4F46E5"} />
+          <Stop offset="100%" stopColor={isDark ? "#A855F7" : "#7C3AED"} />
         </LinearGradient>
       </Defs>
       <Path
         d="M18 10H34L44 20V46C44 48.21 42.21 50 40 50H18C15.79 50 14 48.21 14 46V14C14 11.79 15.79 10 18 10Z"
-        fill="#6366F1"
-        fillOpacity="0.24"
+        fill={isDark ? "#6366F1" : "#EEF2FF"}
+        fillOpacity={isDark ? "0.24" : "0.95"}
         stroke={`url(#${docGradId})`}
         strokeWidth={2.2}
         strokeLinejoin="round"
       />
       <Path d="M34 10V20H44" stroke={`url(#${docGradId})`} strokeWidth={2.2} strokeLinejoin="round" />
-      <Path d="M21 28H35" stroke="#C7D2FE" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M21 34H37" stroke="#C7D2FE" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M21 40H30" stroke="#C7D2FE" strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 28H35" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 34H37" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 40H30" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
       <Path
         d="M47 7L48.1 10.9L52 12L48.1 13.1L47 17L45.9 13.1L42 12L45.9 10.9L47 7Z"
-        fill="#E0E7FF"
+        fill={isDark ? "#E0E7FF" : "#7C3AED"}
       />
     </Svg>
   );
@@ -257,6 +286,14 @@ export function UploadDocumentSparkIcon({ size = 56 }: { size?: number }) {
  * Checklist clipboard icon for Step 2 right card ("4-Step Questionnaire Wizard").
  */
 export function WizardChecklistIcon({ size = 56 }: { size?: number }) {
+  const { isDark } = useTheme();
+  const bodyFill = isDark ? "#1F2937" : "#F1F5F9";
+  const bodyOpacity = isDark ? "0.45" : "0.95";
+  const clipFill = isDark ? "#0F172A" : "#FFFFFF";
+  const strokeColor = isDark ? "#94A3B8" : "#475569";
+  const checkColor = isDark ? "#CBD5E1" : "#4F46E5";
+  const lineColor = isDark ? "#94A3B8" : "#64748B";
+
   return (
     <Svg width={size} height={size} viewBox="0 0 60 60" fill="none">
       <Rect
@@ -265,9 +302,9 @@ export function WizardChecklistIcon({ size = 56 }: { size?: number }) {
         width="30"
         height="38"
         rx="6"
-        fill="#1F2937"
-        fillOpacity="0.45"
-        stroke="#94A3B8"
+        fill={bodyFill}
+        fillOpacity={bodyOpacity}
+        stroke={strokeColor}
         strokeWidth={2}
       />
       <Rect
@@ -276,16 +313,16 @@ export function WizardChecklistIcon({ size = 56 }: { size?: number }) {
         width="14"
         height="6"
         rx="2.5"
-        fill="#0F172A"
-        stroke="#94A3B8"
+        fill={clipFill}
+        stroke={strokeColor}
         strokeWidth={1.8}
       />
-      <Path d="M21 23L23 25L26 21.5" stroke="#CBD5E1" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M29 23.5H38" stroke="#94A3B8" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M21 31L23 33L26 29.5" stroke="#CBD5E1" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M29 31.5H38" stroke="#94A3B8" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M21 39L23 41L26 37.5" stroke="#CBD5E1" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M29 39.5H36" stroke="#94A3B8" strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 23L23 25L26 21.5" stroke={checkColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M29 23.5H38" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 31L23 33L26 29.5" stroke={checkColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M29 31.5H38" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M21 39L23 41L26 37.5" stroke={checkColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M29 39.5H36" stroke={lineColor} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -306,30 +343,36 @@ export function StepProgressHeader({
   onBack?: () => void;
   rightSlot?: React.ReactNode;
 }) {
+  const { colors, isDark } = useTheme();
   return (
     <View className="px-5 pt-3 pb-2">
       <View className="flex-row items-center justify-between mb-3">
-        <View className="w-9">
+        <View className="flex-1 items-start">
           {onBack ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back"
               onPress={onBack}
-              className="h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] active:bg-white/10"
+              style={{
+                backgroundColor: colors.headerBtnBg,
+                borderColor: colors.headerBtnBorder,
+              }}
+              className="h-8 w-8 items-center justify-center rounded-full border active:opacity-75"
             >
-              <ArrowLeft size={16} color="#CBD5E1" />
+              <ArrowLeft size={16} color={colors.textPrimary} />
             </Pressable>
           ) : null}
         </View>
 
         <Text
-          style={WEB_SANS}
-          className="text-[12.5px] font-medium tracking-[0.2px] text-[#94A3B8]"
+          style={[WEB_SANS, { color: colors.textSecondary }]}
+          numberOfLines={1}
+          className="mx-2 text-center text-[12.5px] font-medium tracking-[0.2px]"
         >
           {label}
         </Text>
 
-        <View className="w-9 items-end">{rightSlot}</View>
+        <View className="flex-1 flex-row items-center justify-end">{rightSlot}</View>
       </View>
 
       <View className="flex-row items-center justify-center gap-2 px-6">
@@ -338,9 +381,14 @@ export function StepProgressHeader({
           return (
             <View
               key={idx}
-              className={`h-[4px] flex-1 rounded-full overflow-hidden ${
-                active ? "bg-[#6366F1]" : "bg-[#1E2438]"
-              }`}
+              style={{
+                backgroundColor: active
+                  ? colors.indigo
+                  : isDark
+                    ? "#1E2438"
+                    : colors.border,
+              }}
+              className="h-[4px] flex-1 rounded-full overflow-hidden"
             >
               {active ? <AuthButtonGradient /> : null}
             </View>
@@ -355,19 +403,20 @@ export function StepProgressHeader({
  * Compact luminous cyan-to-violet briefcase mark for the Home Hub top header.
  */
 export function HubBrandBriefcaseIcon({ size = 34 }: { size?: number }) {
-  const strokeId = useSvgId("hubCaseStroke");
-  const fillId = useSvgId("hubCaseFill");
+  const { isDark } = useTheme();
+  const strokeId = useSvgId("hubCaseStroke", isDark);
+  const fillId = useSvgId("hubCaseFill", isDark);
   return (
     <Svg width={size} height={size * 0.9} viewBox="0 0 40 36" fill="none">
       <Defs>
         <LinearGradient id={strokeId} x1="4" y1="6" x2="36" y2="32" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#38BDF8" />
-          <Stop offset="55%" stopColor="#818CF8" />
-          <Stop offset="100%" stopColor="#C084FC" />
+          <Stop offset="0%" stopColor={isDark ? "#38BDF8" : "#0284C7"} />
+          <Stop offset="55%" stopColor={isDark ? "#818CF8" : "#4F46E5"} />
+          <Stop offset="100%" stopColor={isDark ? "#C084FC" : "#7C3AED"} />
         </LinearGradient>
         <LinearGradient id={fillId} x1="6" y1="9" x2="32" y2="30" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.18" />
-          <Stop offset="100%" stopColor="#A855F7" stopOpacity="0.16" />
+          <Stop offset="0%" stopColor={isDark ? "#38BDF8" : "#0284C7"} stopOpacity={isDark ? "0.18" : "0.12"} />
+          <Stop offset="100%" stopColor={isDark ? "#A855F7" : "#7C3AED"} stopOpacity={isDark ? "0.16" : "0.10"} />
         </LinearGradient>
       </Defs>
       <Path
@@ -392,10 +441,10 @@ export function HubBrandBriefcaseIcon({ size = 34 }: { size?: number }) {
         strokeWidth={1.8}
         strokeOpacity="0.9"
       />
-      <Rect x="18" y="21.2" width="4" height="3.6" rx="1" fill="#E0E7FF" />
+      <Rect x="18" y="21.2" width="4" height="3.6" rx="1" fill={isDark ? "#E0E7FF" : "#4F46E5"} />
       <Path
         d="M34.5 2.5L35.35 5.15L38 6L35.35 6.85L34.5 9.5L33.65 6.85L31 6L33.65 5.15L34.5 2.5Z"
-        fill="#E0F2FE"
+        fill={isDark ? "#E0F2FE" : "#0284C7"}
       />
     </Svg>
   );
@@ -405,14 +454,15 @@ export function HubBrandBriefcaseIcon({ size = 34 }: { size?: number }) {
  * Glowing cyan-to-indigo target radar icon matching Card 1 of the Home Hub mockup.
  */
 export function JobHunterHubIcon({ size = 42 }: { size?: number }) {
-  const gradId = useSvgId("radarGrad");
+  const { isDark } = useTheme();
+  const gradId = useSvgId("radarGrad", isDark);
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
       <Defs>
         <LinearGradient id={gradId} x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#38BDF8" />
-          <Stop offset="55%" stopColor="#60A5FA" />
-          <Stop offset="100%" stopColor="#A78BFA" />
+          <Stop offset="0%" stopColor={isDark ? "#38BDF8" : "#0284C7"} />
+          <Stop offset="55%" stopColor={isDark ? "#60A5FA" : "#4F46E5"} />
+          <Stop offset="100%" stopColor={isDark ? "#A78BFA" : "#7C3AED"} />
         </LinearGradient>
       </Defs>
       <Circle cx="24" cy="24" r="16" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeOpacity="0.92" />
@@ -422,8 +472,16 @@ export function JobHunterHubIcon({ size = 42 }: { size?: number }) {
       <Line x1="24" y1="36" x2="24" y2="42.5" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
       <Line x1="5.5" y1="24" x2="12" y2="24" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
       <Line x1="36" y1="24" x2="42.5" y2="24" stroke={`url(#${gradId})`} strokeWidth={2} strokeLinecap="round" />
-      <Line x1="24" y1="24" x2="34.5" y2="13.5" stroke="#BAE6FD" strokeWidth={2.2} strokeLinecap="round" />
-      <Circle cx="24" cy="24" r="2.2" fill="#E0F2FE" />
+      <Line
+        x1="24"
+        y1="24"
+        x2="34.5"
+        y2="13.5"
+        stroke={isDark ? "#BAE6FD" : "#0284C7"}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+      />
+      <Circle cx="24" cy="24" r="2.2" fill={isDark ? "#E0F2FE" : "#4F46E5"} />
     </Svg>
   );
 }
@@ -432,19 +490,20 @@ export function JobHunterHubIcon({ size = 42 }: { size?: number }) {
  * Glowing cyan-to-purple document + sparkle icon matching Card 2 of the Home Hub mockup.
  */
 export function TailorStudioHubIcon({ size = 42 }: { size?: number }) {
-  const gradId = useSvgId("studioGrad");
+  const { isDark } = useTheme();
+  const gradId = useSvgId("studioGrad", isDark);
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
       <Defs>
         <LinearGradient id={gradId} x1="8" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#38BDF8" />
-          <Stop offset="55%" stopColor="#818CF8" />
-          <Stop offset="100%" stopColor="#C084FC" />
+          <Stop offset="0%" stopColor={isDark ? "#38BDF8" : "#0284C7"} />
+          <Stop offset="55%" stopColor={isDark ? "#818CF8" : "#4F46E5"} />
+          <Stop offset="100%" stopColor={isDark ? "#C084FC" : "#7C3AED"} />
         </LinearGradient>
       </Defs>
       <Path
         d="M14 8H27L35 16V37C35 38.66 33.66 40 32 40H14C12.34 40 11 38.66 11 37V11C11 9.34 12.34 8 14 8Z"
-        fill="#38BDF8"
+        fill={isDark ? "#38BDF8" : "#4F46E5"}
         fillOpacity="0.08"
         stroke={`url(#${gradId})`}
         strokeWidth={2.2}
@@ -456,8 +515,8 @@ export function TailorStudioHubIcon({ size = 42 }: { size?: number }) {
       <Line x1="16.5" y1="32.5" x2="23.5" y2="32.5" stroke={`url(#${gradId})`} strokeWidth={2.2} strokeLinecap="round" />
       <Path
         d="M34.5 25.5C35.25 30.2 36.8 31.75 41.5 32.5C36.8 33.25 35.25 34.8 34.5 39.5C33.75 34.8 32.2 33.25 27.5 32.5C32.2 31.75 33.75 30.2 34.5 25.5Z"
-        fill="#A78BFA"
-        stroke="#E0E7FF"
+        fill={isDark ? "#A78BFA" : "#7C3AED"}
+        stroke={isDark ? "#E0E7FF" : "#4338CA"}
         strokeWidth={1.3}
         strokeLinejoin="round"
       />

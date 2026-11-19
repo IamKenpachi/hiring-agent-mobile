@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -22,8 +22,9 @@ import {
   Wand2,
   Zap,
 } from "lucide-react-native";
-import { COLORS } from "../../src/constants/theme";
+import { getCardElevation, type ThemeColors } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError } from "../../src/lib/api";
 import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { setPendingTailorRequest } from "../../src/lib/tailorSession";
@@ -80,6 +81,8 @@ const TONES = [
 export default function StudioScreen() {
   const router = useRouter();
   const { activeProfile, selectedModel, availableModels, refreshTelemetry } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
@@ -210,7 +213,7 @@ export default function StudioScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.titleRow}>
-            <FileText size={16} color={COLORS.purple} />
+            <FileText size={16} color={colors.purple} />
             <Text style={styles.cardTitle}>Target Job Details & Strategy</Text>
           </View>
 
@@ -230,7 +233,7 @@ export default function StudioScreen() {
                   onPress={() => setConfirmingReset(true)}
                   style={styles.resetBtn}
                 >
-                  <RotateCcw size={12} color={COLORS.textSecondary} />
+                  <RotateCcw size={12} color={colors.textSecondary} />
                   <Text style={styles.resetText}>Reset</Text>
                 </Pressable>
               )
@@ -245,28 +248,28 @@ export default function StudioScreen() {
         <View style={styles.twoCol}>
           <View style={[styles.fieldGroup, { flex: 1 }]}>
             <View style={styles.labelRow}>
-              <Briefcase size={12} color={COLORS.textMuted} />
+              <Briefcase size={12} color={colors.textMuted} />
               <Text style={styles.label}>Job Title</Text>
             </View>
             <TextInput
               value={jobTitle}
               onChangeText={setJobTitle}
               placeholder="e.g. Senior Data Analyst"
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               style={styles.input}
             />
           </View>
 
           <View style={[styles.fieldGroup, { flex: 1 }]}>
             <View style={styles.labelRow}>
-              <Building2 size={12} color={COLORS.textMuted} />
+              <Building2 size={12} color={colors.textMuted} />
               <Text style={styles.label}>Company Name</Text>
             </View>
             <TextInput
               value={company}
               onChangeText={setCompany}
               placeholder="e.g. Monzo"
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               style={styles.input}
             />
           </View>
@@ -274,14 +277,14 @@ export default function StudioScreen() {
 
         <View style={styles.fieldGroup}>
           <View style={styles.labelRow}>
-            <LinkIcon size={12} color={COLORS.textMuted} />
+            <LinkIcon size={12} color={colors.textMuted} />
             <Text style={styles.label}>Job URL (Optional)</Text>
           </View>
           <TextInput
             value={jobUrl}
             onChangeText={setJobUrl}
             placeholder="https://company.com/careers/job-id"
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             style={styles.input}
           />
@@ -300,9 +303,9 @@ export default function StudioScreen() {
               ]}
             >
               {extracting ? (
-                <ActivityIndicator size="small" color="#D8B4FE" />
+                <ActivityIndicator size="small" color={colors.purpleText} />
               ) : (
-                <Wand2 size={12} color="#D8B4FE" />
+                <Wand2 size={12} color={colors.purpleText} />
               )}
               <Text style={styles.extractText}>
                 {extracting ? "Extracting..." : "Auto-Extract Info"}
@@ -314,7 +317,7 @@ export default function StudioScreen() {
             value={jobDescription}
             onChangeText={setJobDescription}
             placeholder="Paste the full job description here (responsibilities, required skills, qualifications)..."
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
             multiline
             numberOfLines={8}
             textAlignVertical="top"
@@ -342,7 +345,7 @@ export default function StudioScreen() {
             style={styles.overrideHeader}
           >
             <View style={styles.overrideTitleWrap}>
-              <UserCircle size={16} color={COLORS.emerald} />
+              <UserCircle size={16} color={colors.emerald} />
               <Text style={styles.overrideTitle}>
                 Candidate Capabilities / Profile Override
               </Text>
@@ -357,7 +360,7 @@ export default function StudioScreen() {
                 <Text
                   style={[
                     styles.statusBadgeText,
-                    customCapabilities.trim() && { color: "#6EE7B7" },
+                    customCapabilities.trim() && { color: colors.emeraldText },
                   ]}
                 >
                   {customCapabilities.trim()
@@ -367,9 +370,9 @@ export default function StudioScreen() {
               </View>
             </View>
             {showOverride ? (
-              <ChevronUp size={16} color={COLORS.textSecondary} />
+              <ChevronUp size={16} color={colors.textSecondary} />
             ) : (
-              <ChevronDown size={16} color={COLORS.textSecondary} />
+              <ChevronDown size={16} color={colors.textSecondary} />
             )}
           </Pressable>
 
@@ -383,7 +386,7 @@ export default function StudioScreen() {
                 value={customCapabilities}
                 onChangeText={setCustomCapabilities}
                 placeholder="e.g. Specialized in real-time streaming analytics, Kafka, Snowflake, and dbt..."
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -394,7 +397,7 @@ export default function StudioScreen() {
                   onPress={() => setCustomCapabilities("")}
                   style={styles.clearOverrideBtn}
                 >
-                  <RotateCcw size={12} color={COLORS.rose} />
+                  <RotateCcw size={12} color={colors.roseText} />
                   <Text style={styles.clearOverrideText}>Reset to Active Profile</Text>
                 </Pressable>
               ) : null}
@@ -405,7 +408,7 @@ export default function StudioScreen() {
         {/* Cover Letter Tone Picker */}
         <View style={styles.fieldGroup}>
           <View style={styles.labelRow}>
-            <Sliders size={12} color={COLORS.textMuted} />
+            <Sliders size={12} color={colors.textMuted} />
             <Text style={styles.label}>Cover Letter Tone</Text>
           </View>
           <View style={styles.toneWrap}>
@@ -448,326 +451,333 @@ export default function StudioScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scroll: {
-    padding: 16,
-    paddingBottom: 38,
-    gap: 12,
-  },
-  samplesWrap: {
-    gap: 6,
-  },
-  samplesLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  samplesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  sampleBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 9,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sampleBtnText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    gap: 13,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  cardTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  resetBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  resetText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  confirmBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-  },
-  confirmYes: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FDA4AF",
-  },
-  confirmNo: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  modelPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  modelPillText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#E9D5FF",
-  },
-  twoCol: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  fieldGroup: {
-    gap: 5,
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  labelBold: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  input: {
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: COLORS.textPrimary,
-  },
-  jdHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  extractBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  extractText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#E9D5FF",
-  },
-  jdTextArea: {
-    minHeight: 165,
-    lineHeight: 19,
-  },
-  counterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tipText: {
-    fontSize: 10.5,
-    color: COLORS.textMuted,
-  },
-  counterText: {
-    fontSize: 10.5,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    fontVariant: ["tabular-nums"],
-  },
-  successBanner: {
-    backgroundColor: COLORS.emeraldSoft,
-    borderColor: COLORS.emeraldBorder,
-    borderWidth: 1,
-    borderRadius: 9,
-    padding: 9,
-  },
-  successText: {
-    fontSize: 12,
-    color: "#6EE7B7",
-    fontWeight: "600",
-  },
-  overrideBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.inputBg,
-    overflow: "hidden",
-  },
-  overrideHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 12,
-    gap: 8,
-  },
-  overrideTitleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 7,
-    flex: 1,
-  },
-  overrideTitle: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  statusBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  statusBadgeEmerald: {
-    backgroundColor: COLORS.emeraldSoft,
-    borderColor: COLORS.emeraldBorder,
-  },
-  statusBadgeMuted: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderColor: COLORS.border,
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: COLORS.textMuted,
-  },
-  overrideBody: {
-    padding: 12,
-    paddingTop: 0,
-    gap: 8,
-  },
-  overrideHint: {
-    fontSize: 11.5,
-    color: COLORS.textSecondary,
-    lineHeight: 16,
-  },
-  overrideTextArea: {
-    minHeight: 80,
-  },
-  clearOverrideBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-end",
-    gap: 5,
-  },
-  clearOverrideText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: COLORS.rose,
-  },
-  toneWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  toneChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  toneChipActive: {
-    backgroundColor: COLORS.purpleSoft,
-    borderColor: COLORS.purpleBorder,
-  },
-  toneText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  toneTextActive: {
-    color: "#E9D5FF",
-    fontWeight: "700",
-  },
-  errorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  errorText: {
-    fontSize: 12.5,
-    color: "#FDA4AF",
-    fontWeight: "600",
-  },
-  generateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: COLORS.purple,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 2,
-  },
-  generateBtnText: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  const cardElevation = getCardElevation(isDark);
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scroll: {
+      padding: 16,
+      paddingBottom: 38,
+      gap: 12,
+    },
+    samplesWrap: {
+      gap: 6,
+    },
+    samplesLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
+    samplesRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    sampleBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 9,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      ...cardElevation,
+    },
+    sampleBtnText: {
+      fontSize: 11.5,
+      fontWeight: "600",
+      color: colors.textPrimary,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 15,
+      gap: 13,
+      ...cardElevation,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: 8,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+    },
+    cardTitle: {
+      fontSize: 14.5,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    headerRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+    },
+    resetBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 7,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    resetText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    confirmBox: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 7,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+    },
+    confirmYes: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: colors.roseText,
+    },
+    confirmNo: {
+      fontSize: 11,
+      color: colors.textSecondary,
+    },
+    modelPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    modelPillText: {
+      fontSize: 10.5,
+      fontWeight: "700",
+      color: colors.purpleText,
+    },
+    twoCol: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    fieldGroup: {
+      gap: 5,
+    },
+    labelRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    labelBold: {
+      fontSize: 12.5,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    input: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    jdHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    extractBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    extractText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.purpleText,
+    },
+    jdTextArea: {
+      minHeight: 165,
+      lineHeight: 19,
+    },
+    counterRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    tipText: {
+      fontSize: 10.5,
+      color: colors.textMuted,
+    },
+    counterText: {
+      fontSize: 10.5,
+      color: colors.textSecondary,
+      fontWeight: "600",
+      fontVariant: ["tabular-nums"],
+    },
+    successBanner: {
+      backgroundColor: colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+      borderWidth: 1,
+      borderRadius: 9,
+      padding: 9,
+    },
+    successText: {
+      fontSize: 12,
+      color: colors.emeraldText,
+      fontWeight: "600",
+    },
+    overrideBox: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.inputBg,
+      overflow: "hidden",
+    },
+    overrideHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: 12,
+      gap: 8,
+    },
+    overrideTitleWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 7,
+      flex: 1,
+    },
+    overrideTitle: {
+      fontSize: 12.5,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    statusBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+    },
+    statusBadgeEmerald: {
+      backgroundColor: colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+    },
+    statusBadgeMuted: {
+      backgroundColor: colors.surfaceElevated,
+      borderColor: colors.border,
+    },
+    statusBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: colors.textMuted,
+    },
+    overrideBody: {
+      padding: 12,
+      paddingTop: 0,
+      gap: 8,
+    },
+    overrideHint: {
+      fontSize: 11.5,
+      color: colors.textSecondary,
+      lineHeight: 16,
+    },
+    overrideTextArea: {
+      minHeight: 80,
+    },
+    clearOverrideBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-end",
+      gap: 5,
+    },
+    clearOverrideText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.roseText,
+    },
+    toneWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    toneChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    toneChipActive: {
+      backgroundColor: colors.purpleSoft,
+      borderColor: colors.purpleBorder,
+    },
+    toneText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    toneTextActive: {
+      color: colors.purpleText,
+      fontWeight: "700",
+    },
+    errorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+    },
+    errorText: {
+      fontSize: 12.5,
+      color: colors.roseText,
+      fontWeight: "600",
+    },
+    generateBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: colors.purple,
+      paddingVertical: 14,
+      borderRadius: 12,
+      marginTop: 2,
+    },
+    generateBtnText: {
+      fontSize: 14.5,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+  });
+}

@@ -22,7 +22,21 @@ def test_health_endpoint(client: TestClient) -> None:
     assert res.json() == {"status": "ok", "service": "hiring-agent-mobile-api"}
 
 
-def test_auth_signup_login_me_and_invalid_token(client: TestClient) -> None:
+def test_auth_signup_login_me_and_invalid_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Password shorter than 6 characters is rejected with 422
+    short_pw = client.post(
+        "/api/auth/signup",
+        json={
+            "email": "shortpw@example.com",
+            "password": "12345",
+            "full_name": "Short Pass",
+        },
+    )
+    assert short_pw.status_code == 422
+
     signup_res = client.post(
         "/api/auth/signup",
         json={
@@ -51,7 +65,7 @@ def test_auth_signup_login_me_and_invalid_token(client: TestClient) -> None:
     )
     assert bad_login.status_code == 401
 
-    # Valid login returns JWT working on /api/auth/me
+    # Valid login returns JWT working on /api/auth/me (including trial fields)
     login_res = client.post(
         "/api/auth/login",
         json={"email": "careeruser@example.com", "password": "MyPassword99!"},
@@ -61,7 +75,16 @@ def test_auth_signup_login_me_and_invalid_token(client: TestClient) -> None:
 
     me_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me_res.status_code == 200
-    assert me_res.json()["email"] == "careeruser@example.com"
+    me_data = me_res.json()
+    assert me_data["email"] == "careeruser@example.com"
+    assert me_data["trial_available"] is False
+    assert me_data["trial_calls_used"] == 0
+    assert me_data["trial_calls_limit"] == 15
+
+    monkeypatch.setenv("GEMINI_API_KEY", "AIzaSyTestTrialKey1234567890")
+    me_trial = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_trial.status_code == 200
+    assert me_trial.json()["trial_available"] is True
 
     # Explicitly invalid token returns 401
     bad_me = client.get("/api/auth/me", headers={"Authorization": "Bearer totally.invalid.jwt"})

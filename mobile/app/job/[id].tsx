@@ -21,8 +21,12 @@ import {
   Sparkles,
   XCircle,
 } from "lucide-react-native";
-import { COLORS } from "../../src/constants/theme";
+import {
+  getCardElevation,
+  type ThemeColors,
+} from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError } from "../../src/lib/api";
 import { copyToClipboard } from "../../src/lib/clipboard";
 import {
@@ -41,7 +45,9 @@ const TONES = [
   "Conversational",
 ];
 
-function renderTextSpans(spans: TextSpan[]) {
+type JobDetailStyles = ReturnType<typeof createStyles>;
+
+function renderTextSpans(spans: TextSpan[], styles: JobDetailStyles) {
   return spans.map((span, index) => {
     const linkUrl =
       span.linkUrl && /^(https?:|mailto:)/i.test(span.linkUrl)
@@ -72,6 +78,8 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { selectedModel } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [job, setJob] = useState<RankedJob | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,7 +176,7 @@ export default function JobDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.indigo} />
+        <ActivityIndicator size="large" color={colors.indigo} />
         <Text style={styles.centerText}>Loading Job Match Analysis...</Text>
       </View>
     );
@@ -200,7 +208,7 @@ export default function JobDetailScreen() {
                 onPress={() => void Linking.openURL(job.job_url)}
                 style={styles.linkBtn}
               >
-                <ExternalLink size={13} color={COLORS.indigo} />
+                <ExternalLink size={13} color={colors.indigoText} />
                 <Text style={styles.linkBtnText}>View Original Posting</Text>
               </Pressable>
             ) : null}
@@ -210,16 +218,16 @@ export default function JobDetailScreen() {
 
           <View style={styles.metaList}>
             <View style={styles.metaItem}>
-              <Building2 size={14} color={COLORS.textSecondary} />
+              <Building2 size={14} color={colors.textSecondary} />
               <Text style={styles.metaText}>{job.company}</Text>
             </View>
             <View style={styles.metaItem}>
-              <MapPin size={14} color={COLORS.textSecondary} />
+              <MapPin size={14} color={colors.textSecondary} />
               <Text style={styles.metaText}>{job.location || "Remote / Unspecified"}</Text>
             </View>
             <View style={styles.metaItem}>
-              <DollarSign size={14} color={COLORS.emerald} />
-              <Text style={[styles.metaText, { color: COLORS.emerald, fontWeight: "700" }]}>
+              <DollarSign size={14} color={colors.emeraldText} />
+              <Text style={[styles.metaText, { color: colors.emeraldText, fontWeight: "700" }]}>
                 {job.salary || "Salary not listed"}
               </Text>
             </View>
@@ -257,7 +265,7 @@ export default function JobDetailScreen() {
 
           <View style={styles.skillSection}>
             <View style={styles.skillHeader}>
-              <CheckCircle2 size={14} color={COLORS.emerald} />
+              <CheckCircle2 size={14} color={colors.emerald} />
               <Text style={styles.skillHeading}>
                 Matched Skills ({job.matched_skills?.length || 0})
               </Text>
@@ -277,7 +285,7 @@ export default function JobDetailScreen() {
 
           <View style={styles.skillSection}>
             <View style={styles.skillHeader}>
-              <XCircle size={14} color={COLORS.rose} />
+              <XCircle size={14} color={colors.rose} />
               <Text style={styles.skillHeading}>
                 Missing / Target Skills ({job.missing_skills?.length || 0})
               </Text>
@@ -307,7 +315,7 @@ export default function JobDetailScreen() {
           ) : null}
           {job.recommendation ? (
             <View style={[styles.callout, styles.strategyCallout]}>
-              <Text style={[styles.calloutLabel, { color: "#E9D5FF" }]}>
+              <Text style={[styles.calloutLabel, { color: colors.purpleText }]}>
                 Tailoring Recommendation
               </Text>
               <Text style={styles.calloutBody}>{job.recommendation}</Text>
@@ -336,7 +344,7 @@ export default function JobDetailScreen() {
             value={customCapabilities}
             onChangeText={setCustomCapabilities}
             placeholder="Optional: extra highlights or projects to emphasize for this role..."
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
             multiline
             style={styles.overrideInput}
           />
@@ -358,9 +366,9 @@ export default function JobDetailScreen() {
                 ]}
               >
                 {copiedDesc ? (
-                  <Check size={13} color={COLORS.emerald} />
+                  <Check size={13} color={colors.emeraldText} />
                 ) : (
-                  <Copy size={13} color={COLORS.textSecondary} />
+                  <Copy size={13} color={colors.textSecondary} />
                 )}
                 <Text
                   style={[
@@ -403,14 +411,14 @@ export default function JobDetailScreen() {
                         {block.marker}
                       </Text>
                       <Text selectable style={styles.descBulletText}>
-                        {renderTextSpans(block.spans)}
+                        {renderTextSpans(block.spans, styles)}
                       </Text>
                     </View>
                   );
                 }
                 return (
                   <Text key={`desc-p-${idx}`} selectable style={styles.fullDesc}>
-                    {renderTextSpans(block.spans)}
+                    {renderTextSpans(block.spans, styles)}
                   </Text>
                 );
               })}
@@ -443,318 +451,324 @@ export default function JobDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  center: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 20,
-  },
-  centerText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  scroll: {
-    padding: 16,
-    paddingBottom: 110,
-    gap: 14,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    gap: 12,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  platformBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: COLORS.cyanSoft,
-    borderWidth: 1,
-    borderColor: COLORS.cyanBorder,
-  },
-  platformText: {
-    fontSize: 10.5,
-    fontWeight: "800",
-    color: "#67E8F9",
-  },
-  linkBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: COLORS.indigoSoft,
-    borderWidth: 1,
-    borderColor: COLORS.indigoBorder,
-  },
-  linkBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#C7D2FE",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  metaList: {
-    gap: 6,
-  },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  metaText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  sectionTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  skillSection: {
-    gap: 7,
-  },
-  skillHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  skillHeading: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  matchedChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.emeraldSoft,
-    borderWidth: 1,
-    borderColor: COLORS.emeraldBorder,
-  },
-  matchedText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#6EE7B7",
-  },
-  missingChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-  },
-  missingText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#FDA4AF",
-  },
-  muted: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-  callout: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-    gap: 4,
-  },
-  strategyCallout: {
-    backgroundColor: COLORS.purpleSoft,
-    borderColor: COLORS.purpleBorder,
-  },
-  calloutLabel: {
-    fontSize: 11.5,
-    fontWeight: "800",
-    color: COLORS.indigo,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  calloutBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.textPrimary,
-  },
-  toneWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  toneChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  toneChipActive: {
-    backgroundColor: COLORS.purpleSoft,
-    borderColor: COLORS.purpleBorder,
-  },
-  toneText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  toneTextActive: {
-    color: "#E9D5FF",
-    fontWeight: "700",
-  },
-  overrideInput: {
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    padding: 10,
-    minHeight: 62,
-    fontSize: 12.5,
-    color: COLORS.textPrimary,
-    textAlignVertical: "top",
-  },
-  descHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  copyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  copyBtnCopied: {
-    backgroundColor: COLORS.emeraldSoft,
-    borderColor: COLORS.emeraldBorder,
-  },
-  copyBtnText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  copyBtnTextCopied: {
-    color: COLORS.emerald,
-    fontWeight: "700",
-  },
-  descBody: {
-    gap: 8,
-  },
-  descHeading: {
-    fontSize: 13.5,
-    fontWeight: "700",
-    lineHeight: 19,
-    color: COLORS.textPrimary,
-  },
-  descHeadingSpaced: {
-    marginTop: 6,
-  },
-  descBulletRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingLeft: 2,
-  },
-  descBulletMarker: {
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-    minWidth: 10,
-  },
-  descNumberMarker: {
-    minWidth: 20,
-  },
-  descBulletText: {
-    flex: 1,
-    flexShrink: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: COLORS.textSecondary,
-  },
-  fullDesc: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: COLORS.textSecondary,
-  },
-  descBold: {
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  descItalic: {
-    fontStyle: "italic",
-  },
-  descLink: {
-    color: "#93C5FD",
-    textDecorationLine: "underline",
-  },
-  errorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  errorText: {
-    fontSize: 12.5,
-    color: "#FDA4AF",
-    fontWeight: "600",
-  },
-  stickyBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 14,
-    backgroundColor: "rgba(9, 13, 22, 0.96)",
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  ctaBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: COLORS.purple,
-    paddingVertical: 15,
-    borderRadius: 13,
-  },
-  ctaText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    center: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      padding: 20,
+    },
+    centerText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: "600",
+    },
+    scroll: {
+      padding: 16,
+      paddingBottom: 110,
+      gap: 14,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 15,
+      gap: 12,
+      ...getCardElevation(isDark),
+    },
+    topRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    platformBadge: {
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderRadius: 7,
+      backgroundColor: colors.cyanSoft,
+      borderWidth: 1,
+      borderColor: colors.cyanBorder,
+    },
+    platformText: {
+      fontSize: 10.5,
+      fontWeight: "800",
+      color: colors.cyanText,
+    },
+    linkBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: colors.indigoSoft,
+      borderWidth: 1,
+      borderColor: colors.indigoBorder,
+    },
+    linkBtnText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.indigoText,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    metaList: {
+      gap: 6,
+    },
+    metaItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+    },
+    metaText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    sectionTitle: {
+      fontSize: 14.5,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    skillSection: {
+      gap: 7,
+    },
+    skillHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    skillHeading: {
+      fontSize: 12.5,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    chipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    matchedChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.emeraldSoft,
+      borderWidth: 1,
+      borderColor: colors.emeraldBorder,
+    },
+    matchedText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.emeraldText,
+    },
+    missingChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+    },
+    missingText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.roseText,
+    },
+    muted: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    callout: {
+      backgroundColor: colors.inputBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 12,
+      gap: 4,
+    },
+    strategyCallout: {
+      backgroundColor: colors.purpleSoft,
+      borderColor: colors.purpleBorder,
+    },
+    calloutLabel: {
+      fontSize: 11.5,
+      fontWeight: "800",
+      color: colors.indigoText,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    calloutBody: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.textPrimary,
+    },
+    toneWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    toneChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    toneChipActive: {
+      backgroundColor: colors.purpleSoft,
+      borderColor: colors.purpleBorder,
+    },
+    toneText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    toneTextActive: {
+      color: colors.purpleText,
+      fontWeight: "700",
+    },
+    overrideInput: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 10,
+      minHeight: 62,
+      fontSize: 12.5,
+      color: colors.textPrimary,
+      textAlignVertical: "top",
+    },
+    descHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      paddingBottom: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    copyBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    copyBtnCopied: {
+      backgroundColor: colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+    },
+    copyBtnText: {
+      fontSize: 11.5,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    copyBtnTextCopied: {
+      color: colors.emeraldText,
+      fontWeight: "700",
+    },
+    descBody: {
+      gap: 8,
+    },
+    descHeading: {
+      fontSize: 13.5,
+      fontWeight: "700",
+      lineHeight: 19,
+      color: colors.textPrimary,
+    },
+    descHeadingSpaced: {
+      marginTop: 6,
+    },
+    descBulletRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      paddingLeft: 2,
+    },
+    descBulletMarker: {
+      fontSize: 13,
+      lineHeight: 20,
+      fontWeight: "700",
+      color: colors.textSecondary,
+      minWidth: 10,
+    },
+    descNumberMarker: {
+      minWidth: 20,
+    },
+    descBulletText: {
+      flex: 1,
+      flexShrink: 1,
+      fontSize: 13,
+      lineHeight: 20,
+      color: colors.textSecondary,
+    },
+    fullDesc: {
+      fontSize: 13,
+      lineHeight: 20,
+      color: colors.textSecondary,
+    },
+    descBold: {
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    descItalic: {
+      fontStyle: "italic",
+    },
+    descLink: {
+      color: colors.indigoText,
+      textDecorationLine: "underline",
+    },
+    errorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+    },
+    errorText: {
+      fontSize: 12.5,
+      color: colors.roseText,
+      fontWeight: "600",
+    },
+    stickyBar: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: 14,
+      backgroundColor: colors.tabBarBg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    ctaBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: colors.purple,
+      paddingVertical: 15,
+      borderRadius: 13,
+    },
+    ctaText: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+  });
+}
 

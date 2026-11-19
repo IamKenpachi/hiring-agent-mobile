@@ -702,9 +702,14 @@ def _run_playwright_pdf(html_content: str, output_path: str, is_cover_letter: bo
     )
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+            timeout=25000,
+        )
         try:
             page = browser.new_page()
+            page.set_default_timeout(25000)
             try:
                 page.set_content(html_content, wait_until="networkidle", timeout=10000)
             except PlaywrightTimeoutError:

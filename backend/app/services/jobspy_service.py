@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -117,6 +118,22 @@ def _infer_country_indeed(location: str) -> str:
     return "usa"
 
 
+def _resolve_jobspy_proxies() -> List[str]:
+    """Read optional JOBSPY_PROXY_URL from env or config and parse comma-separated entries."""
+    cfg_val = ""
+    try:
+        from app.core import config as core_config
+
+        cfg_val = str(getattr(core_config, "JOBSPY_PROXY_URL", "") or "").strip()
+    except Exception:
+        cfg_val = ""
+    env_val = os.getenv("JOBSPY_PROXY_URL", "").strip()
+    raw_proxy = env_val or cfg_val
+    if not raw_proxy:
+        return []
+    return [proxy.strip() for proxy in raw_proxy.split(",") if proxy.strip()]
+
+
 def _invoke_jobspy(**kwargs: Any) -> Any:
     """Invoke JobSpy scrape_jobs while respecting either module or package monkeypatches."""
     fn = scrape_jobs
@@ -189,6 +206,7 @@ def scrape_jobspy_boards(
 
     jobs_list: List[Dict[str, str]] = []
     seen_keys: set[str] = set()
+    proxies = _resolve_jobspy_proxies()
 
     for site in selected_sites:
         kwargs: Dict[str, Any] = {
@@ -201,6 +219,8 @@ def scrape_jobspy_boards(
             "description_format": "markdown",
             "verbose": 0,
         }
+        if proxies:
+            kwargs["proxies"] = list(proxies)
         if hours_old and int(hours_old) > 0:
             kwargs["hours_old"] = int(hours_old)
         if is_remote:

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -20,7 +20,8 @@ import {
   Trash2,
   User,
 } from "lucide-react-native";
-import { COLORS } from "../constants/theme";
+import { getCardElevation, type ThemeColors } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 import { apiClient, ApiError } from "../lib/api";
 import type {
   EducationItem,
@@ -70,6 +71,8 @@ export function ProfileCreator({
   onSuccess,
   onCancel,
 }: ProfileCreatorProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const isEditing = Boolean(initialProfile);
   const [mode, setMode] = useState<"pdf" | "wizard">(isEditing ? "wizard" : "pdf");
   const [wizardStep, setWizardStep] = useState(1);
@@ -289,7 +292,7 @@ export function ProfileCreator({
           >
             <FileUp
               size={15}
-              color={mode === "pdf" ? "#FFFFFF" : COLORS.textSecondary}
+              color={mode === "pdf" ? "#FFFFFF" : colors.textSecondary}
             />
             <Text style={[styles.modeText, mode === "pdf" && styles.modeTextActive]}>
               Upload PDF CV
@@ -305,7 +308,7 @@ export function ProfileCreator({
           >
             <Sparkles
               size={15}
-              color={mode === "wizard" ? "#FFFFFF" : COLORS.textSecondary}
+              color={mode === "wizard" ? "#FFFFFF" : colors.textSecondary}
             />
             <Text style={[styles.modeText, mode === "wizard" && styles.modeTextActive]}>
               Questionnaire Wizard
@@ -333,13 +336,13 @@ export function ProfileCreator({
               value={pdfProfileName}
               onChangeText={setPdfProfileName}
               placeholder="e.g. Senior Data Analyst Track"
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               style={styles.input}
             />
           </View>
 
           <Pressable onPress={handlePickPdf} style={styles.dropzone}>
-            <FileUp size={26} color={COLORS.indigo} />
+            <FileUp size={26} color={colors.indigo} />
             <Text style={styles.dropzoneTitle}>
               {pickedFile ? pickedFile.name : "Select PDF or Text CV"}
             </Text>
@@ -404,14 +407,15 @@ export function ProfileCreator({
                       active
                         ? "#FFFFFF"
                         : completed
-                          ? COLORS.emerald
-                          : COLORS.textSecondary
+                          ? colors.emerald
+                          : colors.textSecondary
                     }
                   />
                   <Text
                     style={[
                       styles.stepChipText,
                       active && styles.stepChipTextActive,
+                      completed && styles.stepChipTextCompleted,
                     ]}
                   >
                     {step.id}. {step.label}
@@ -431,7 +435,7 @@ export function ProfileCreator({
                   value={profileName}
                   onChangeText={setProfileName}
                   placeholder="e.g. Data Science & Analytics"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   style={styles.input}
                 />
               </View>
@@ -442,7 +446,7 @@ export function ProfileCreator({
                   value={fullName}
                   onChangeText={setFullName}
                   placeholder="e.g. Alex Rivera"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   style={styles.input}
                 />
               </View>
@@ -454,7 +458,7 @@ export function ProfileCreator({
                     value={email}
                     onChangeText={setEmail}
                     placeholder="alex@example.com"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     style={styles.input}
@@ -467,7 +471,7 @@ export function ProfileCreator({
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="+44 7700 900077"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     keyboardType="phone-pad"
                     style={styles.input}
                   />
@@ -480,7 +484,7 @@ export function ProfileCreator({
                   value={location}
                   onChangeText={setLocation}
                   placeholder="London, UK"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   style={styles.input}
                 />
               </View>
@@ -491,7 +495,7 @@ export function ProfileCreator({
                   value={linkedinUrl}
                   onChangeText={setLinkedinUrl}
                   placeholder="https://linkedin.com/in/username"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   style={styles.input}
                 />
@@ -504,7 +508,7 @@ export function ProfileCreator({
                     value={githubUrl}
                     onChangeText={setGithubUrl}
                     placeholder="https://github.com/user"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     style={styles.input}
                   />
@@ -516,7 +520,7 @@ export function ProfileCreator({
                     value={portfolioUrl}
                     onChangeText={setPortfolioUrl}
                     placeholder="https://portfolio.dev"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     style={styles.input}
                   />
@@ -535,7 +539,7 @@ export function ProfileCreator({
                   value={summary}
                   onChangeText={setSummary}
                   placeholder="Senior Data Analyst with 5+ years driving product growth through SQL, Python, dbt, and experimentation..."
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -549,7 +553,7 @@ export function ProfileCreator({
                   value={skillsText}
                   onChangeText={setSkillsText}
                   placeholder="Python, SQL, Snowflake, dbt, Tableau, A/B Testing, Airflow"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   multiline
                   style={[styles.input, styles.textAreaSmall]}
                 />
@@ -586,7 +590,7 @@ export function ProfileCreator({
                   }
                   style={styles.addSmallBtn}
                 >
-                  <Plus size={13} color={COLORS.indigo} />
+                  <Plus size={13} color={colors.indigoText} />
                   <Text style={styles.addSmallText}>Add Role</Text>
                 </Pressable>
               </View>
@@ -601,7 +605,7 @@ export function ProfileCreator({
                           setExperiences((prev) => prev.filter((_, i) => i !== idx))
                         }
                       >
-                        <Trash2 size={15} color={COLORS.rose} />
+                        <Trash2 size={15} color={colors.rose} />
                       </Pressable>
                     ) : null}
                   </View>
@@ -614,7 +618,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Job Title (e.g. Senior Data Analyst)"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                   />
 
@@ -629,7 +633,7 @@ export function ProfileCreator({
                         )
                       }
                       placeholder="Company"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={[styles.input, { flex: 1 }]}
                     />
                     <TextInput
@@ -642,7 +646,7 @@ export function ProfileCreator({
                         )
                       }
                       placeholder="2022 – Present"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={[styles.input, { flex: 1 }]}
                     />
                   </View>
@@ -657,7 +661,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Key impact bullets (one per line, include metrics e.g. Increased conversion by 18%)"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     multiline
                     numberOfLines={3}
                     textAlignVertical="top"
@@ -672,7 +676,7 @@ export function ProfileCreator({
             <View style={styles.stepContent}>
               <View style={styles.rowBetween}>
                 <View style={styles.rowIconTitle}>
-                  <FolderGit2 size={15} color={COLORS.purple} />
+                  <FolderGit2 size={15} color={colors.purple} />
                   <Text style={styles.sectionTitle}>Key Projects</Text>
                 </View>
                 <Pressable
@@ -684,7 +688,7 @@ export function ProfileCreator({
                   }
                   style={styles.addSmallBtn}
                 >
-                  <Plus size={13} color={COLORS.indigo} />
+                  <Plus size={13} color={colors.indigoText} />
                   <Text style={styles.addSmallText}>Add Project</Text>
                 </Pressable>
               </View>
@@ -699,7 +703,7 @@ export function ProfileCreator({
                           setProjects((prev) => prev.filter((_, i) => i !== idx))
                         }
                       >
-                        <Trash2 size={15} color={COLORS.rose} />
+                        <Trash2 size={15} color={colors.rose} />
                       </Pressable>
                     ) : null}
                   </View>
@@ -712,7 +716,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Project Name"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                   />
                   <TextInput
@@ -725,7 +729,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Impact & architecture summary"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     multiline
                     style={[styles.input, styles.textAreaSmall]}
                   />
@@ -739,7 +743,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Technologies (e.g. Python, FastAPI, Snowflake)"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                   />
                 </View>
@@ -747,7 +751,7 @@ export function ProfileCreator({
 
               <View style={[styles.rowBetween, { marginTop: 6 }]}>
                 <View style={styles.rowIconTitle}>
-                  <GraduationCap size={15} color={COLORS.emerald} />
+                  <GraduationCap size={15} color={colors.emerald} />
                   <Text style={styles.sectionTitle}>Education</Text>
                 </View>
                 <Pressable
@@ -759,7 +763,7 @@ export function ProfileCreator({
                   }
                   style={styles.addSmallBtn}
                 >
-                  <Plus size={13} color={COLORS.indigo} />
+                  <Plus size={13} color={colors.indigoText} />
                   <Text style={styles.addSmallText}>Add Degree</Text>
                 </Pressable>
               </View>
@@ -774,7 +778,7 @@ export function ProfileCreator({
                       )
                     }
                     placeholder="Degree (e.g. B.Sc. Computer Science)"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                   />
                   <View style={styles.twoCol}>
@@ -788,7 +792,7 @@ export function ProfileCreator({
                         )
                       }
                       placeholder="University"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={[styles.input, { flex: 2 }]}
                     />
                     <TextInput
@@ -801,7 +805,7 @@ export function ProfileCreator({
                         )
                       }
                       placeholder="Year"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={[styles.input, { flex: 1 }]}
                     />
                   </View>
@@ -814,7 +818,7 @@ export function ProfileCreator({
                   value={certificationsText}
                   onChangeText={setCertificationsText}
                   placeholder="AWS Certified Data Analytics, dbt Analytics Engineering"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   style={styles.input}
                 />
               </View>
@@ -870,246 +874,253 @@ export function ProfileCreator({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: 12,
-  },
-  modeSwitch: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: COLORS.surface,
-    padding: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  modeBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 9,
-  },
-  modeBtnActive: {
-    backgroundColor: COLORS.indigo,
-  },
-  modeText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  modeTextActive: {
-    color: "#FFFFFF",
-  },
-  errorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#FDA4AF",
-    fontWeight: "600",
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  helperText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: COLORS.textSecondary,
-  },
-  fieldGroup: {
-    gap: 5,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  input: {
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13.5,
-    color: COLORS.textPrimary,
-  },
-  textArea: {
-    minHeight: 96,
-  },
-  textAreaSmall: {
-    minHeight: 70,
-  },
-  twoCol: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  dropzone: {
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: COLORS.indigoBorder,
-    backgroundColor: COLORS.indigoSoft,
-    borderRadius: 14,
-    paddingVertical: 22,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    gap: 6,
-  },
-  dropzoneTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-    textAlign: "center",
-  },
-  dropzoneSub: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  stepperRow: {
-    gap: 6,
-    paddingBottom: 2,
-  },
-  stepChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  stepChipActive: {
-    backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
-  },
-  stepChipCompleted: {
-    borderColor: COLORS.emeraldBorder,
-    backgroundColor: COLORS.emeraldSoft,
-  },
-  stepChipText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  stepChipTextActive: {
-    color: "#FFFFFF",
-  },
-  stepContent: {
-    gap: 11,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  skillChip: {
-    backgroundColor: COLORS.indigoSoft,
-    borderColor: COLORS.indigoBorder,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  skillChipText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: "#C7D2FE",
-  },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  rowIconTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  addSmallBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: COLORS.indigoSoft,
-    borderWidth: 1,
-    borderColor: COLORS.indigoBorder,
-  },
-  addSmallText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#C7D2FE",
-  },
-  subCard: {
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 11,
-    gap: 9,
-  },
-  subCardTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
-  primaryBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    backgroundColor: COLORS.indigo,
-    paddingVertical: 12,
-    borderRadius: 11,
-  },
-  primaryBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  secondaryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryBtnText: {
-    fontSize: 13.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  return StyleSheet.create({
+    wrapper: {
+      gap: 12,
+    },
+    modeSwitch: {
+      flexDirection: "row",
+      gap: 8,
+      backgroundColor: colors.surface,
+      padding: 4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      ...getCardElevation(isDark),
+    },
+    modeBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 9,
+      borderRadius: 9,
+    },
+    modeBtnActive: {
+      backgroundColor: colors.indigo,
+    },
+    modeText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    modeTextActive: {
+      color: "#FFFFFF",
+    },
+    errorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+    },
+    errorText: {
+      fontSize: 12,
+      color: colors.roseText,
+      fontWeight: "600",
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 15,
+      gap: 12,
+      ...getCardElevation(isDark),
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    helperText: {
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: colors.textSecondary,
+    },
+    fieldGroup: {
+      gap: 5,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    input: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: isDark ? colors.border : colors.borderStrong,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 13.5,
+      color: colors.textPrimary,
+    },
+    textArea: {
+      minHeight: 96,
+    },
+    textAreaSmall: {
+      minHeight: 70,
+    },
+    twoCol: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    dropzone: {
+      borderWidth: 1.5,
+      borderStyle: "dashed",
+      borderColor: colors.indigoBorder,
+      backgroundColor: colors.indigoSoft,
+      borderRadius: 14,
+      paddingVertical: 22,
+      paddingHorizontal: 14,
+      alignItems: "center",
+      gap: 6,
+    },
+    dropzoneTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary,
+      textAlign: "center",
+    },
+    dropzoneSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    stepperRow: {
+      gap: 6,
+      paddingBottom: 2,
+    },
+    stepChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    stepChipActive: {
+      backgroundColor: colors.indigo,
+      borderColor: colors.indigo,
+    },
+    stepChipCompleted: {
+      borderColor: colors.emeraldBorder,
+      backgroundColor: colors.emeraldSoft,
+    },
+    stepChipText: {
+      fontSize: 11.5,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    stepChipTextActive: {
+      color: "#FFFFFF",
+    },
+    stepChipTextCompleted: {
+      color: colors.emeraldText,
+    },
+    stepContent: {
+      gap: 11,
+    },
+    chipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    skillChip: {
+      backgroundColor: colors.indigoSoft,
+      borderColor: colors.indigoBorder,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+    },
+    skillChipText: {
+      fontSize: 11.5,
+      fontWeight: "600",
+      color: colors.indigoText,
+    },
+    rowBetween: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    rowIconTitle: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    addSmallBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: colors.indigoSoft,
+      borderWidth: 1,
+      borderColor: colors.indigoBorder,
+    },
+    addSmallText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.indigoText,
+    },
+    subCard: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 11,
+      gap: 9,
+    },
+    subCardTitle: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
+    actionRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 4,
+    },
+    primaryBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      backgroundColor: colors.indigo,
+      paddingVertical: 12,
+      borderRadius: 11,
+    },
+    primaryBtnText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    secondaryBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 11,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    secondaryBtnText: {
+      fontSize: 13.5,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    btnDisabled: {
+      opacity: 0.5,
+    },
+  });
+}
 

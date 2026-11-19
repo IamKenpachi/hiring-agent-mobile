@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
+import { normalizeThemeMode, type ThemeMode } from "../constants/theme";
 import type { ProfileCreatePayload } from "../types";
 
 export const STORAGE_KEYS = {
@@ -8,6 +9,8 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: "auth_token",
   SELECTED_MODEL: "selected_model",
   PENDING_ONBOARDING_DRAFT: "pending_onboarding_draft",
+  THEME_MODE: "app_theme_mode",
+  TRIAL_MODE: "starter_trial_mode",
 } as const;
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
@@ -62,6 +65,15 @@ async function deleteRawItem(key: string): Promise<void> {
   }
 }
 
+export async function clearAllAccountData(): Promise<void> {
+  await Promise.all([
+    deleteRawItem(STORAGE_KEYS.AUTH_TOKEN),
+    deleteRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT),
+    deleteRawItem(STORAGE_KEYS.GEMINI_API_KEY),
+    deleteRawItem(STORAGE_KEYS.TRIAL_MODE),
+  ]);
+}
+
 export const secureStorage = {
   getItem: getRawItem,
   setItem: setRawItem,
@@ -101,6 +113,15 @@ export const secureStorage = {
     await setRawItem(STORAGE_KEYS.SELECTED_MODEL, model || DEFAULT_GEMINI_MODEL);
   },
 
+  async getThemeMode(): Promise<ThemeMode> {
+    const raw = await getRawItem(STORAGE_KEYS.THEME_MODE);
+    return normalizeThemeMode(raw);
+  },
+
+  async setThemeMode(mode: ThemeMode): Promise<void> {
+    await setRawItem(STORAGE_KEYS.THEME_MODE, normalizeThemeMode(mode));
+  },
+
   async getPendingOnboardingDraft(): Promise<ProfileCreatePayload | null> {
     const raw = await getRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT);
     if (!raw) return null;
@@ -119,11 +140,26 @@ export const secureStorage = {
     }
   },
 
+  async getTrialMode(): Promise<boolean> {
+    const raw = await getRawItem(STORAGE_KEYS.TRIAL_MODE);
+    return raw === "true";
+  },
+
+  async setTrialMode(enabled: boolean): Promise<void> {
+    if (enabled) {
+      await setRawItem(STORAGE_KEYS.TRIAL_MODE, "true");
+    } else {
+      await deleteRawItem(STORAGE_KEYS.TRIAL_MODE);
+    }
+  },
+
   async clearAuthSession(): Promise<void> {
     await Promise.all([
       deleteRawItem(STORAGE_KEYS.AUTH_TOKEN),
       deleteRawItem(STORAGE_KEYS.PENDING_ONBOARDING_DRAFT),
     ]);
   },
+
+  clearAllAccountData,
 };
 

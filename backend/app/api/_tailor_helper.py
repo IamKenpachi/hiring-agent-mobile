@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.agents.adk_agents import run_application_tailor_pipeline
 from app.core.config import OUTPUTS_DIR, resolve_gemini_model
+from app.core.security import (
+    enforce_trial_quota_if_needed,
+    get_supabase_client,
+    is_supabase_auth_enabled,
+)
 from app.db.models import TailoredOutput
 from app.services.pdf_service import (
     generate_pdf_file,
@@ -18,6 +25,93 @@ from app.services.pdf_service import (
     render_cv_html,
 )
 from app.services.token_service import record_token_usage
+
+logger = logging.getLogger(__name__)
+
+OUTPUTS_STORAGE_BUCKET = "outputs-pdfs"
+_UNSET_HEADER_KEY: Any = object()
+
+
+def _storage_doc_name(doc_type: str) -> str:
+    clean = (doc_type or "").strip().lower()
+    if clean in {"cover_letter", "cl", "letter"}:
+        return "cover_letter"
+    return clean or "cv"
+
+
+def upload_pdf_to_storage(
+    user_id: str,
+    output_id: str,
+    doc_type: str,
+    pdf_path: str | Path,
+) -> bool:
+    """Best-effort upload of a generated PDF to the private Supabase outputs-pdfs bucket."""
+    if not is_supabase_auth_enabled():
+        return False
+    path = Path(pdf_path)
+    if not path.is_file():
+        return False
+    object_path = f"{user_id}/{output_id}/{_storage_doc_name(doc_type)}.pdf"
+    try:
+        sb = get_supabase_client()
+        sb.storage.from_(OUTPUTS_STORAGE_BUCKET).upload(
+            path=object_path,
+            file=path.read_bytes(),
+            file_options={"content-type": "application/pdf", "upsert": "true"},
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Best-effort Supabase PDF upload failed for %s: %s", object_path, exc)
+        return False
+
+
+def download_pdf_from_storage(
+    user_id: str,
+    output_id: str,
+    doc_type: str,
+    target_path: str | Path,
+) -> bool:
+    """Best-effort download of a cached PDF from Supabase outputs-pdfs bucket to local disk."""
+    if not is_supabase_auth_enabled():
+        return False
+    object_path = f"{user_id}/{output_id}/{_storage_doc_name(doc_type)}.pdf"
+    try:
+        sb = get_supabase_client()
+        data = sb.storage.from_(OUTPUTS_STORAGE_BUCKET).download(object_path)
+        if not data or not isinstance(data, (bytes, bytearray)):
+            return False
+        dest = Path(target_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(bytes(data))
+        return dest.is_file() and dest.stat().st_size > 0
+    except Exception as exc:
+        logger.warning("Best-effort Supabase PDF download failed for %s: %s", object_path, exc)
+        return False
+
+
+def delete_output_storage_folder(user_id: str, output_id: str) -> bool:
+    """Best-effort removal of stored PDFs for an output from Supabase outputs-pdfs bucket."""
+    if not is_supabase_auth_enabled():
+        return False
+    prefix = f"{user_id}/{output_id}"
+    try:
+        sb = get_supabase_client()
+        bucket = sb.storage.from_(OUTPUTS_STORAGE_BUCKET)
+        paths: List[str] = []
+        try:
+            entries = bucket.list(prefix) or []
+            for item in entries:
+                if isinstance(item, dict) and item.get("name"):
+                    paths.append(f"{prefix}/{item['name']}")
+        except Exception:
+            pass
+        if not paths:
+            paths = [f"{prefix}/cv.pdf", f"{prefix}/cover_letter.pdf"]
+        bucket.remove(paths)
+        return True
+    except Exception as exc:
+        logger.warning("Best-effort Supabase Storage cleanup failed for %s: %s", prefix, exc)
+        return False
 
 
 def _safe_json_loads(raw: Optional[str], fallback: Any) -> Any:
@@ -90,8 +184,11 @@ def execute_and_save_tailoring(
     model_name: str,
     api_key: str,
     ranked_job_id: Optional[str] = None,
+    provided_header_key: Any = _UNSET_HEADER_KEY,
 ) -> TailoredOutput:
     """Run ADK ApplicationTailorPipeline, render HTML + A4 PDFs, seed chat history, and persist."""
+    if provided_header_key is not _UNSET_HEADER_KEY:
+        enforce_trial_quota_if_needed(db, user_id, provided_header_key)
     resolved_model = resolve_gemini_model(model_name)
     effective_tone = (tone or "Executive & Formal").strip() or "Executive & Formal"
 
@@ -181,4 +278,7 @@ def execute_and_save_tailoring(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    upload_pdf_to_storage(user_id, output_id, "cv", cv_pdf_path)
+    upload_pdf_to_storage(user_id, output_id, "cover_letter", cl_pdf_path)
     return row

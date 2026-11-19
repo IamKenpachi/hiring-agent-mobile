@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Plus, Trash2, X } from "lucide-react-native";
-import { AuthButtonGradient, StepProgressHeader, WEB_SANS } from "./OnboardingGraphics";
+import { getCardElevation } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 import type { WorkPreference, WizardDraftState } from "../lib/profileHelpers";
+import { AuthButtonGradient, StepProgressHeader, WEB_SANS } from "./OnboardingGraphics";
+import { ThemeToggleButton } from "./ThemeToggleButton";
 
 interface ProfileWizardViewProps {
   draft: WizardDraftState;
@@ -25,6 +28,7 @@ export function ProfileWizardView({
   submitting = false,
   error = null,
 }: ProfileWizardViewProps) {
+  const { colors, isDark } = useTheme();
   const [skillInput, setSkillInput] = useState("");
   const [techInputs, setTechInputs] = useState<Record<number, string>>({});
 
@@ -91,6 +95,26 @@ export function ProfileWizardView({
           ? "Work Experience"
           : "Key Projects & Education";
 
+  const topInputStyle = {
+    backgroundColor: colors.inputBg,
+    borderColor: isDark ? colors.border : colors.borderStrong,
+    color: colors.textPrimary,
+  };
+
+  const nestedInputStyle = {
+    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    color: colors.textPrimary,
+  };
+
+  const cardContainerStyle = [
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+    },
+    getCardElevation(isDark),
+  ];
+
   return (
     <View className="flex-1">
       <StepProgressHeader
@@ -98,6 +122,7 @@ export function ProfileWizardView({
         totalSteps={4}
         currentStep={step}
         onBack={handleBack}
+        rightSlot={<ThemeToggleButton size="compact" />}
       />
 
       <ScrollView
@@ -106,91 +131,122 @@ export function ProfileWizardView({
         keyboardShouldPersistTaps="handled"
       >
         <Text
-          style={WEB_SANS}
-          className="text-center text-[21px] font-bold tracking-[-0.4px] text-white mb-4"
+          style={[WEB_SANS, { color: colors.textPrimary }]}
+          className="text-center text-[21px] font-bold tracking-[-0.4px] mb-4"
         >
           {stepHeading}
         </Text>
 
         {error ? (
-          <View className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5">
-            <Text className="text-xs font-medium text-red-200">{error}</Text>
+          <View
+            style={{
+              backgroundColor: colors.roseSoft,
+              borderColor: colors.roseBorder,
+            }}
+            className="mb-3 rounded-xl border px-3.5 py-2.5"
+          >
+            <Text style={{ color: colors.roseText }} className="text-xs font-medium">
+              {error}
+            </Text>
           </View>
         ) : null}
 
         {step === 1 ? (
           <View className="gap-3">
             <View>
-              <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                className="text-[12px] font-medium mb-1.5"
+              >
                 Profile Name
               </Text>
               <TextInput
                 value={draft.profileName}
                 onChangeText={(v) => onChange({ ...draft, profileName: v })}
                 placeholder="Senior Data Analyst"
-                placeholderTextColor="#475569"
-                className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13.5px] text-white"
+                placeholderTextColor={colors.textMuted}
+                style={topInputStyle}
+                className="h-[42px] rounded-xl border px-3.5 text-[13.5px]"
               />
             </View>
 
             <View>
-              <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                className="text-[12px] font-medium mb-1.5"
+              >
                 Full Name
               </Text>
               <TextInput
                 value={draft.fullName}
                 onChangeText={(v) => onChange({ ...draft, fullName: v })}
                 placeholder="Alex Morgan"
-                placeholderTextColor="#475569"
-                className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13.5px] text-white"
+                placeholderTextColor={colors.textMuted}
+                style={topInputStyle}
+                className="h-[42px] rounded-xl border px-3.5 text-[13.5px]"
               />
             </View>
 
             <View className="flex-row gap-2.5">
               <View className="flex-1">
-                <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+                <Text
+                  style={[WEB_SANS, { color: colors.textSecondary }]}
+                  className="text-[12px] font-medium mb-1.5"
+                >
                   Email
                 </Text>
                 <TextInput
                   value={draft.email}
                   onChangeText={(v) => onChange({ ...draft, email: v })}
                   placeholder="alex@example.com"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3 text-[13px] text-white"
+                  style={topInputStyle}
+                  className="h-[42px] rounded-xl border px-3 text-[13px]"
                 />
               </View>
               <View className="flex-1">
-                <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+                <Text
+                  style={[WEB_SANS, { color: colors.textSecondary }]}
+                  className="text-[12px] font-medium mb-1.5"
+                >
                   Phone
                 </Text>
                 <TextInput
                   value={draft.phone}
                   onChangeText={(v) => onChange({ ...draft, phone: v })}
                   placeholder="+44 7700 900123"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="phone-pad"
-                  className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3 text-[13px] text-white"
+                  style={topInputStyle}
+                  className="h-[42px] rounded-xl border px-3 text-[13px]"
                 />
               </View>
             </View>
 
             <View>
-              <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                className="text-[12px] font-medium mb-1.5"
+              >
                 Location
               </Text>
               <TextInput
                 value={draft.location}
                 onChangeText={(v) => onChange({ ...draft, location: v })}
                 placeholder="London, UK"
-                placeholderTextColor="#475569"
-                className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13.5px] text-white"
+                placeholderTextColor={colors.textMuted}
+                style={topInputStyle}
+                className="h-[42px] rounded-xl border px-3.5 text-[13.5px]"
               />
             </View>
 
             <View>
-              <Text style={WEB_SANS} className="text-[12px] font-medium text-[#CBD5E1] mb-1.5">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                className="text-[12px] font-medium mb-1.5"
+              >
                 Work Preference
               </Text>
               <View className="flex-row gap-2">
@@ -200,17 +256,18 @@ export function ProfileWizardView({
                     <Pressable
                       key={pref}
                       onPress={() => onChange({ ...draft, workPreference: pref })}
-                      className={`h-[34px] flex-1 items-center justify-center rounded-full border ${
-                        active
-                          ? "border-[#6366F1] bg-[#6366F1]/20"
-                          : "border-white/10 bg-[#0D121F]"
-                      }`}
+                      style={{
+                        backgroundColor: active ? colors.indigoSoft : colors.inputBg,
+                        borderColor: active ? colors.indigo : colors.border,
+                      }}
+                      className="h-[34px] flex-1 items-center justify-center rounded-full border"
                     >
                       <Text
-                        style={WEB_SANS}
-                        className={`text-[12.5px] font-semibold ${
-                          active ? "text-white" : "text-[#94A3B8]"
-                        }`}
+                        style={[
+                          WEB_SANS,
+                          { color: active ? colors.indigoText : colors.textSecondary },
+                        ]}
+                        className="text-[12.5px] font-semibold"
                       >
                         {pref}
                       </Text>
@@ -225,9 +282,10 @@ export function ProfileWizardView({
                 value={draft.linkedinUrl}
                 onChangeText={(v) => onChange({ ...draft, linkedinUrl: v })}
                 placeholder="LinkedIn URL"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
-                className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13px] text-white"
+                style={topInputStyle}
+                className="h-[42px] rounded-xl border px-3.5 text-[13px]"
               />
             </View>
 
@@ -236,9 +294,10 @@ export function ProfileWizardView({
                 value={draft.githubUrl}
                 onChangeText={(v) => onChange({ ...draft, githubUrl: v })}
                 placeholder="GitHub / Portfolio URL"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
-                className="h-[42px] rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13px] text-white"
+                style={topInputStyle}
+                className="h-[42px] rounded-xl border px-3.5 text-[13px]"
               />
             </View>
           </View>
@@ -253,16 +312,21 @@ export function ProfileWizardView({
                 onSubmitEditing={addSkill}
                 returnKeyType="done"
                 placeholder="Add Skill (e.g. Python, SQL, dbt)"
-                placeholderTextColor="#64748B"
-                className="h-[42px] flex-1 rounded-xl border border-white/10 bg-[#0D121F] px-3.5 text-[13.5px] text-white"
+                placeholderTextColor={colors.textMuted}
+                style={topInputStyle}
+                className="h-[42px] flex-1 rounded-xl border px-3.5 text-[13.5px]"
               />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add skill"
                 onPress={addSkill}
-                className="h-[42px] w-[42px] items-center justify-center rounded-xl border border-[#6366F1]/50 bg-[#6366F1]/25 active:opacity-80"
+                style={{
+                  backgroundColor: colors.indigoSoft,
+                  borderColor: colors.indigoBorder,
+                }}
+                className="h-[42px] w-[42px] items-center justify-center rounded-xl border active:opacity-80"
               >
-                <Plus size={18} color="#C7D2FE" />
+                <Plus size={18} color={colors.indigoText} />
               </Pressable>
             </View>
 
@@ -272,33 +336,44 @@ export function ProfileWizardView({
                   <Pressable
                     key={`${skill}-${idx}`}
                     onPress={() => removeSkill(idx)}
-                    className="flex-row items-center gap-1.5 rounded-full border border-[#14B8A6]/45 bg-[#0D9488]/20 px-3 py-1.5"
+                    style={{
+                      backgroundColor: colors.emeraldSoft,
+                      borderColor: colors.emeraldBorder,
+                    }}
+                    className="flex-row items-center gap-1.5 rounded-full border px-3 py-1.5"
                   >
-                    <Text style={WEB_SANS} className="text-[12px] font-semibold text-[#6EE7B7]">
+                    <Text
+                      style={[WEB_SANS, { color: colors.emeraldText }]}
+                      className="text-[12px] font-semibold"
+                    >
                       {skill}
                     </Text>
-                    <X size={12} color="#6EE7B7" />
+                    <X size={12} color={colors.emeraldText} />
                   </Pressable>
                 ))}
               </View>
             ) : (
-              <Text className="text-xs text-[#64748B]">
+              <Text style={{ color: colors.textMuted }} className="text-xs">
                 Add skills one by one to generate ATS skill tags.
               </Text>
             )}
 
             <View className="mt-1">
-              <Text style={WEB_SANS} className="text-[12.5px] font-medium text-[#CBD5E1] mb-2">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                className="text-[12.5px] font-medium mb-2"
+              >
                 Summary
               </Text>
               <TextInput
                 value={draft.summary}
                 onChangeText={(v) => onChange({ ...draft, summary: v })}
                 placeholder="Experienced Senior Data Analyst with 5+ years in fintech, specializing in scalable data pipelines (dbt, Snowflake) and executive BI dashboards..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.textMuted}
                 multiline
                 textAlignVertical="top"
-                className="min-h-[180px] rounded-2xl border border-white/10 bg-[#0D121F] p-3.5 text-[13px] leading-[20px] text-white"
+                style={topInputStyle}
+                className="min-h-[180px] rounded-2xl border p-3.5 text-[13px] leading-[20px]"
               />
             </View>
           </View>
@@ -307,12 +382,9 @@ export function ProfileWizardView({
         {step === 3 ? (
           <View className="gap-3.5">
             {draft.experiences.map((exp, idx) => (
-              <View
-                key={idx}
-                className="rounded-2xl border border-white/10 bg-[#0D121F] p-4 gap-3"
-              >
+              <View key={idx} style={cardContainerStyle} className="rounded-2xl border p-4 gap-3">
                 <View className="flex-row items-center justify-between">
-                  <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                  <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                     Experience Card {draft.experiences.length > 1 ? `#${idx + 1}` : ""}
                   </Text>
                   {draft.experiences.length > 1 ? (
@@ -324,13 +396,15 @@ export function ProfileWizardView({
                         })
                       }
                     >
-                      <Trash2 size={15} color="#EF4444" />
+                      <Trash2 size={15} color={colors.rose} />
                     </Pressable>
                   ) : null}
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Role Title</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Role Title
+                  </Text>
                   <TextInput
                     value={exp.title}
                     onChangeText={(v) => {
@@ -339,13 +413,16 @@ export function ProfileWizardView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="Data Analyst"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Company</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Company
+                  </Text>
                   <TextInput
                     value={exp.company}
                     onChangeText={(v) => {
@@ -354,13 +431,16 @@ export function ProfileWizardView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="FinTech Corp"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Dates</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Dates
+                  </Text>
                   <TextInput
                     value={exp.duration}
                     onChangeText={(v) => {
@@ -369,13 +449,14 @@ export function ProfileWizardView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="2023 – Present"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
                     Impact Bullets
                   </Text>
                   <TextInput
@@ -386,10 +467,11 @@ export function ProfileWizardView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder={"• Built 15+ dbt models in Snowflake reducing query latency by 40%.\n• Automated executive KPI dashboards in Tableau for 50+ stakeholders."}
-                    placeholderTextColor="#475569"
+                    placeholderTextColor={colors.textMuted}
                     multiline
                     textAlignVertical="top"
-                    className="min-h-[96px] rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2.5 text-[12.5px] leading-[18px] text-white"
+                    style={nestedInputStyle}
+                    className="min-h-[96px] rounded-lg border px-3 py-2.5 text-[12.5px] leading-[18px]"
                   />
                 </View>
               </View>
@@ -405,10 +487,14 @@ export function ProfileWizardView({
                   ],
                 })
               }
-              className="h-[44px] flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-white/[0.02] active:bg-white/[0.05]"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.borderStrong,
+              }}
+              className="h-[44px] flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed active:opacity-80"
             >
-              <Plus size={15} color="#CBD5E1" />
-              <Text style={WEB_SANS} className="text-[13px] font-semibold text-[#CBD5E1]">
+              <Plus size={15} color={colors.textSecondary} />
+              <Text style={[WEB_SANS, { color: colors.textSecondary }]} className="text-[13px] font-semibold">
                 Add Another Role
               </Text>
             </Pressable>
@@ -419,12 +505,9 @@ export function ProfileWizardView({
           <View className="gap-3.5">
             {/* Key Project Card(s) */}
             {draft.projects.map((proj, idx) => (
-              <View
-                key={idx}
-                className="rounded-2xl border border-white/10 bg-[#0D121F] p-4 gap-3"
-              >
+              <View key={idx} style={cardContainerStyle} className="rounded-2xl border p-4 gap-3">
                 <View className="flex-row items-center justify-between">
-                  <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                  <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                     Key Project Card {draft.projects.length > 1 ? `#${idx + 1}` : ""}
                   </Text>
                   {draft.projects.length > 1 ? (
@@ -436,13 +519,15 @@ export function ProfileWizardView({
                         })
                       }
                     >
-                      <Trash2 size={15} color="#EF4444" />
+                      <Trash2 size={15} color={colors.rose} />
                     </Pressable>
                   ) : null}
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Project Title</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Project Title
+                  </Text>
                   <TextInput
                     value={proj.name}
                     onChangeText={(v) => {
@@ -451,13 +536,16 @@ export function ProfileWizardView({
                       onChange({ ...draft, projects: next });
                     }}
                     placeholder="Customer Churn Analytics Pipeline"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1.5">Tech Stack</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1.5">
+                    Tech Stack
+                  </Text>
                   {proj.technologies.length > 0 ? (
                     <View className="flex-row flex-wrap gap-1.5 mb-2">
                       {proj.technologies.map((tech, tIdx) => (
@@ -471,10 +559,16 @@ export function ProfileWizardView({
                             };
                             onChange({ ...draft, projects: next });
                           }}
-                          className="flex-row items-center gap-1 rounded-md border border-[#14B8A6]/45 bg-[#0D9488]/20 px-2.5 py-1"
+                          style={{
+                            backgroundColor: colors.emeraldSoft,
+                            borderColor: colors.emeraldBorder,
+                          }}
+                          className="flex-row items-center gap-1 rounded-md border px-2.5 py-1"
                         >
-                          <Text className="text-[11px] font-semibold text-[#6EE7B7]">{tech}</Text>
-                          <X size={10} color="#6EE7B7" />
+                          <Text style={{ color: colors.emeraldText }} className="text-[11px] font-semibold">
+                            {tech}
+                          </Text>
+                          <X size={10} color={colors.emeraldText} />
                         </Pressable>
                       ))}
                     </View>
@@ -486,22 +580,29 @@ export function ProfileWizardView({
                       onChangeText={(v) => setTechInputs((prev) => ({ ...prev, [idx]: v }))}
                       onSubmitEditing={() => addProjectTech(idx)}
                       placeholder="Add tech (e.g. Python, FastAPI)"
-                      placeholderTextColor="#475569"
-                      className="flex-1 rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-xs text-white"
+                      placeholderTextColor={colors.textMuted}
+                      style={nestedInputStyle}
+                      className="flex-1 rounded-lg border px-3 py-2 text-xs"
                     />
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Add tech"
                       onPress={() => addProjectTech(idx)}
-                      className="items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] px-2.5"
+                      style={{
+                        backgroundColor: colors.surfaceElevated,
+                        borderColor: colors.borderStrong,
+                      }}
+                      className="items-center justify-center rounded-lg border px-2.5"
                     >
-                      <Plus size={14} color="#CBD5E1" />
+                      <Plus size={14} color={colors.textSecondary} />
                     </Pressable>
                   </View>
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Impact</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Impact
+                  </Text>
                   <TextInput
                     value={proj.description}
                     onChangeText={(v) => {
@@ -510,9 +611,10 @@ export function ProfileWizardView({
                       onChange({ ...draft, projects: next });
                     }}
                     placeholder="Automated executive KPI reporting and cohort retention dashboards."
-                    placeholderTextColor="#475569"
+                    placeholderTextColor={colors.textMuted}
                     multiline
-                    className="min-h-[54px] rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[12.5px] text-white"
+                    style={nestedInputStyle}
+                    className="min-h-[54px] rounded-lg border px-3 py-2 text-[12.5px]"
                     textAlignVertical="top"
                   />
                 </View>
@@ -521,16 +623,15 @@ export function ProfileWizardView({
 
             {/* Education Card */}
             {draft.educationList.map((ed, idx) => (
-              <View
-                key={idx}
-                className="rounded-2xl border border-white/10 bg-[#0D121F] p-4 gap-2.5"
-              >
-                <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+              <View key={idx} style={cardContainerStyle} className="rounded-2xl border p-4 gap-2.5">
+                <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                   Education Card
                 </Text>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">Degree</Text>
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
+                    Degree
+                  </Text>
                   <TextInput
                     value={ed.degree}
                     onChangeText={(v) => {
@@ -539,13 +640,14 @@ export function ProfileWizardView({
                       onChange({ ...draft, educationList: next });
                     }}
                     placeholder="B.Sc. in Data Science & Analytics"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
 
                 <View>
-                  <Text className="text-[11px] font-medium text-[#64748B] mb-1">
+                  <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium mb-1">
                     University & Graduation Year
                   </Text>
                   <TextInput
@@ -556,8 +658,9 @@ export function ProfileWizardView({
                       onChange({ ...draft, educationList: next });
                     }}
                     placeholder="University of Manchester • 2023"
-                    placeholderTextColor="#475569"
-                    className="rounded-lg border border-white/[0.08] bg-[#080C16] px-3 py-2 text-[13px] text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={nestedInputStyle}
+                    className="rounded-lg border px-3 py-2 text-[13px]"
                   />
                 </View>
               </View>
@@ -576,7 +679,7 @@ export function ProfileWizardView({
           className="h-[50px] w-full items-center justify-center overflow-hidden rounded-full active:opacity-90"
         >
           <AuthButtonGradient />
-          <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
+          <Text style={[WEB_SANS, { color: "#FFFFFF" }]} className="text-[15.5px] font-semibold">
             {ctaLabel}
           </Text>
         </Pressable>

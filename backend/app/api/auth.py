@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import shutil
 import uuid
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, inspect, select
 from sqlalchemy.orm import Session
 
 from app.agents import is_placeholder_gemini_key
-from app.core.config import AVAILABLE_MODELS, SUPABASE_KEY, SUPABASE_URL, resolve_gemini_model
+from app.core import config as core_config
+from app.core.config import (
+    AVAILABLE_MODELS,
+    EMAIL_CONFIRM_AUTO,
+    SUPABASE_KEY,
+    SUPABASE_URL,
+    get_demo_trial_max_calls,
+    resolve_gemini_model,
+)
+from app.core.rate_limit import limiter
 from app.core.security import (
     CurrentUser,
     create_access_token,
@@ -21,15 +33,17 @@ from app.core.security import (
     is_supabase_auth_enabled,
     verify_password,
 )
-from app.db.models import User
+from app.db.models import Profile, RankedJob, SearchRun, TailoredOutput, TokenUsage, User
 from app.db.session import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class SignupRequest(BaseModel):
     email: str = Field(..., min_length=3)
-    password: str = Field(..., min_length=4)
+    password: str = Field(..., min_length=6)
     full_name: Optional[str] = ""
 
 
@@ -69,19 +83,21 @@ def _extract_full_name(sb_user: Any) -> str:
 
 
 @router.post("/signup")
-def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
+@limiter.limit("10/minute")
+def signup(request: Request, req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
     """Create a new user account via Supabase Auth (or local fallback) and return a JWT."""
     email = _normalize_email(req.email)
     full_name = (req.full_name or "").strip()
 
     if is_supabase_auth_enabled():
         sb = _new_supabase_client()
+        email_confirm = bool(core_config.EMAIL_CONFIRM_AUTO if core_config.EMAIL_CONFIRM_AUTO != EMAIL_CONFIRM_AUTO else EMAIL_CONFIRM_AUTO)
         try:
             sb.auth.admin.create_user(
                 {
                     "email": email,
                     "password": req.password,
-                    "email_confirm": True,
+                    "email_confirm": email_confirm,
                     "user_metadata": {"full_name": full_name},
                 }
             )
@@ -100,6 +116,11 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
         try:
             session_resp = sb.auth.sign_in_with_password({"email": email, "password": req.password})
         except Exception as exc:
+            if not email_confirm:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account created. Please check your email to confirm your address before signing in.",
+                ) from exc
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Account created, but automatic sign-in failed: {exc}",
@@ -150,7 +171,8 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
 
 
 @router.post("/login")
-def login(req: LoginRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
+@limiter.limit("10/minute")
+def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
     """Authenticate an existing user via Supabase Auth (or local fallback) and return a JWT."""
     email = _normalize_email(req.email)
 
@@ -203,19 +225,124 @@ def get_me(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Return the authenticated user's identity."""
+    """Return the authenticated user's identity and Starter trial quota status."""
+    trial_calls_used = int(
+        db.execute(
+            select(func.count(TokenUsage.id)).where(TokenUsage.user_id == current_user.id)
+        ).scalar()
+        or 0
+    )
+    trial_fields = {
+        "trial_available": bool(os.getenv("GEMINI_API_KEY", "").strip()),
+        "trial_calls_used": trial_calls_used,
+        "trial_calls_limit": get_demo_trial_max_calls(),
+    }
     if is_supabase_auth_enabled():
         return {
             "id": current_user.id,
             "email": current_user.email,
             "full_name": "",
+            **trial_fields,
         }
-    user = db.execute(select(User).where(User.id == current_user.id)).scalar_one_or_none()
+    user = None
+    if inspect(db.get_bind()).has_table(User.__tablename__):
+        user = db.execute(select(User).where(User.id == current_user.id)).scalar_one_or_none()
     return {
         "id": current_user.id,
         "email": current_user.email,
         "full_name": user.full_name if user else "",
+        **trial_fields,
     }
+
+
+def _delete_user_storage_files(sb: Any, user_id: str, output_ids: List[str]) -> None:
+    """Best-effort cleanup of a user's stored PDF files in the private outputs-pdfs bucket."""
+    try:
+        bucket = sb.storage.from_("outputs-pdfs")
+        paths_to_remove: List[str] = []
+        try:
+            entries = bucket.list(user_id) or []
+        except Exception:
+            entries = []
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            if entry.get("id") is None:
+                try:
+                    nested = bucket.list(f"{user_id}/{name}") or []
+                except Exception:
+                    nested = []
+                for item in nested:
+                    if isinstance(item, dict) and item.get("name"):
+                        paths_to_remove.append(f"{user_id}/{name}/{item['name']}")
+            else:
+                paths_to_remove.append(f"{user_id}/{name}")
+
+        for oid in output_ids:
+            for fname in ("cv.pdf", "cover_letter.pdf", "tailored_cv.pdf"):
+                paths_to_remove.append(f"{user_id}/{oid}/{fname}")
+
+        unique_paths = list(dict.fromkeys(paths_to_remove))
+        if unique_paths:
+            bucket.remove(unique_paths)
+    except Exception as exc:
+        logger.warning("Supabase Storage cleanup failed for user %s: %s", user_id, exc)
+
+
+@router.delete("/account")
+def delete_account(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Permanently delete the authenticated user's account, DB rows, local/cloud PDFs, and auth identity."""
+    output_rows = (
+        db.execute(select(TailoredOutput).where(TailoredOutput.user_id == current_user.id))
+        .scalars()
+        .all()
+    )
+    pdf_paths = [p for row in output_rows for p in (row.cv_pdf_path, row.cl_pdf_path) if p]
+    output_ids = [row.id for row in output_rows]
+
+    db.execute(delete(TokenUsage).where(TokenUsage.user_id == current_user.id))
+    db.execute(delete(TailoredOutput).where(TailoredOutput.user_id == current_user.id))
+    db.execute(delete(RankedJob).where(RankedJob.user_id == current_user.id))
+    db.execute(delete(SearchRun).where(SearchRun.user_id == current_user.id))
+    db.execute(delete(Profile).where(Profile.user_id == current_user.id))
+    if inspect(db.get_bind()).has_table(User.__tablename__):
+        db.execute(delete(User).where(User.id == current_user.id))
+    db.commit()
+
+    outputs_root = core_config.OUTPUTS_DIR.resolve()
+    user_outputs_dir = (outputs_root / current_user.id).resolve()
+    for raw_pdf_path in pdf_paths:
+        pdf_path = Path(raw_pdf_path)
+        try:
+            resolved_pdf = pdf_path.resolve()
+        except OSError:
+            continue
+        if (
+            resolved_pdf != outputs_root
+            and resolved_pdf.is_relative_to(outputs_root)
+            and not resolved_pdf.is_dir()
+        ):
+            resolved_pdf.unlink(missing_ok=True)
+
+    if user_outputs_dir != outputs_root and user_outputs_dir.is_relative_to(outputs_root):
+        shutil.rmtree(user_outputs_dir, ignore_errors=True)
+
+    if is_supabase_auth_enabled():
+        sb = _new_supabase_client()
+        _delete_user_storage_files(sb, current_user.id, output_ids)
+        try:
+            sb.auth.admin.delete_user(current_user.id)
+        except Exception as exc:
+            logger.warning("Supabase auth admin.delete_user failed for %s: %s", current_user.id, exc)
+
+    return {"deleted": True, "user_id": current_user.id}
 
 
 @router.post("/validate-gemini-key")

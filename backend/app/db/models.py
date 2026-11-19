@@ -144,7 +144,7 @@ class TailoredOutput(Base):
     job_description = Column(Text, nullable=False, default="")
     custom_capabilities = Column(Text, nullable=False, default="")
     tone = Column(String, nullable=False, default="Executive & Formal")
-    model_used = Column(String, nullable=False, default="gemini-3.7-flash")
+    model_used = Column(String, nullable=False, default="gemini-3.8-flash")
     overall_fit_score = Column(Integer, nullable=False, default=0)
     skills_match_score = Column(Integer, nullable=False, default=0)
     experience_fit_score = Column(Integer, nullable=False, default=0)

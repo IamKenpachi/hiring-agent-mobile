@@ -16,11 +16,19 @@ from sqlalchemy.orm import Session
 from app.agents.adk_agents import run_revision_copilot
 from app.api._tailor_helper import (
     _safe_json_loads,
+    delete_output_storage_folder,
+    download_pdf_from_storage,
     serialize_tailored_output,
     serialize_tailored_output_summary,
+    upload_pdf_to_storage,
 )
 from app.core.config import OUTPUTS_DIR, resolve_gemini_model
-from app.core.security import CurrentUser, get_current_user, get_gemini_api_key
+from app.core.security import (
+    CurrentUser,
+    enforce_trial_quota_if_needed,
+    get_current_user,
+    get_gemini_api_key,
+)
 from app.db.models import Profile, TailoredOutput
 from app.db.session import get_db
 from app.services.pdf_service import (
@@ -112,6 +120,8 @@ def delete_output(
     if output_dir != outputs_root and output_dir.is_relative_to(outputs_root):
         shutil.rmtree(output_dir, ignore_errors=True)
 
+    delete_output_storage_folder(current_user.id, row.id)
+
     return {"deleted": True, "id": output_id}
 
 
@@ -121,10 +131,12 @@ def revise_output(
     req: ReviseOutputRequest,
     current_user: CurrentUser = Depends(get_current_user),
     gemini_api_key: str = Depends(get_gemini_api_key),
+    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-Api-Key"),
     x_gemini_model: Optional[str] = Header(None, alias="X-Gemini-Model"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Revise the CV or Cover Letter via ADK RevisionCopilotAgent and update HTML, PDF, and 4 scores."""
+    enforce_trial_quota_if_needed(db, current_user.id, x_gemini_api_key)
     row = (
         db.execute(
             select(TailoredOutput).where(
@@ -222,6 +234,11 @@ def revise_output(
     db.commit()
     db.refresh(row)
 
+    if req.doc_type == "cv" and row.cv_pdf_path:
+        upload_pdf_to_storage(current_user.id, row.id, "cv", row.cv_pdf_path)
+    elif req.doc_type == "cover_letter" and row.cl_pdf_path:
+        upload_pdf_to_storage(current_user.id, row.id, "cover_letter", row.cl_pdf_path)
+
     serialized = serialize_tailored_output(row)
     serialized["explanation"] = explanation
     return serialized
@@ -258,13 +275,16 @@ def download_output_pdf(
     pdf_path = Path(pdf_path_str) if pdf_path_str else (OUTPUTS_DIR / current_user.id / row.id / f"{clean_type}.pdf")
 
     if not pdf_path.exists():
-        markdown_src = row.cv_markdown if clean_type == "cv" else row.cover_letter_markdown
-        generate_pdf_file(
-            markdown_src or f"# {row.job_title}",
-            str(pdf_path),
-            doc_type=clean_type,
-            title=row.job_title,
-        )
+        restored = download_pdf_from_storage(current_user.id, row.id, clean_type, pdf_path)
+        if not restored or not pdf_path.exists():
+            markdown_src = row.cv_markdown if clean_type == "cv" else row.cover_letter_markdown
+            generate_pdf_file(
+                markdown_src or f"# {row.job_title}",
+                str(pdf_path),
+                doc_type=clean_type,
+                title=row.job_title,
+            )
+            upload_pdf_to_storage(current_user.id, row.id, clean_type, pdf_path)
 
     pdf_bytes = pdf_path.read_bytes()
     safe_company = "".join(c if c.isalnum() else "_" for c in (row.company or "Company")).strip("_") or "Company"

@@ -2,6 +2,9 @@ export interface User {
   id: string;
   email: string;
   full_name?: string | null;
+  trial_available?: boolean;
+  trial_calls_used?: number;
+  trial_calls_limit?: number;
 }
 
 export interface AuthResponse {

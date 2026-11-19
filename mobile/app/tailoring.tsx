@@ -26,8 +26,13 @@ import {
   OnboardingAmbientGlow,
   WEB_SANS,
 } from "../src/components/OnboardingGraphics";
-import { COLORS } from "../src/constants/theme";
+import {
+  getCardElevation,
+  type ThemeColors,
+} from "../src/constants/theme";
 import { useAuth } from "../src/context/AuthContext";
+import { useTheme } from "../src/context/ThemeContext";
+import { ThemeToggleButton } from "../src/components/ThemeToggleButton";
 import { apiClient, ApiError } from "../src/lib/api";
 import { resolveModelDisplayName } from "../src/lib/profileHelpers";
 import {
@@ -101,6 +106,8 @@ function OrbitalRingSvg({
 export default function TailoringScreen() {
   const router = useRouter();
   const { availableModels, refreshTelemetry } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [request] = useState<PendingTailorRequest | null>(() =>
     getPendingTailorRequest()
@@ -341,7 +348,7 @@ export default function TailoringScreen() {
     <View style={styles.root}>
       <OnboardingAmbientGlow strong />
       <SafeAreaView style={styles.safeArea}>
-        {/* Top-left subtle Cancel / Back button */}
+        {/* Top bar: Cancel / Back on left, Theme toggle on right */}
         <View style={styles.topBar}>
           <Pressable
             accessibilityRole="button"
@@ -349,11 +356,12 @@ export default function TailoringScreen() {
             onPress={status === "waiting" ? handleCancel : handleGoBack}
             style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.75 }]}
           >
-            <ArrowLeft size={16} color={COLORS.textSecondary} />
+            <ArrowLeft size={16} color={colors.textSecondary} />
             <Text style={[styles.cancelText, WEB_SANS]}>
               {status === "waiting" ? "Cancel" : "Back"}
             </Text>
           </Pressable>
+          <ThemeToggleButton size="compact" />
         </View>
 
         <ScrollView
@@ -363,7 +371,7 @@ export default function TailoringScreen() {
           {status === "missing" ? (
             <View style={styles.card}>
               <View style={styles.warningIconBadge}>
-                <AlertTriangle size={24} color={COLORS.amber} />
+                <AlertTriangle size={24} color={colors.amber} />
               </View>
               <Text style={[styles.cardTitle, WEB_SANS]}>
                 No Active Tailoring Session
@@ -388,7 +396,7 @@ export default function TailoringScreen() {
           ) : status === "error" ? (
             <View style={[styles.card, styles.errorCard]}>
               <View style={styles.errorIconBadge}>
-                <AlertTriangle size={24} color="#FDA4AF" />
+                <AlertTriangle size={24} color={colors.roseText} />
               </View>
               <Text style={[styles.cardTitle, WEB_SANS]}>Tailoring Interrupted</Text>
               {subtitle ? (
@@ -455,9 +463,9 @@ export default function TailoringScreen() {
                     size={156}
                     strokeWidth={2.2}
                     dashArray="84 26 24 22"
-                    startColor="#818CF8"
-                    endColor="#A855F7"
-                    dotColor="#C4B5FD"
+                    startColor={isDark ? "#818CF8" : colors.indigo}
+                    endColor={colors.purple}
+                    dotColor={isDark ? "#C4B5FD" : colors.purple}
                   />
                 </Animated.View>
 
@@ -471,16 +479,16 @@ export default function TailoringScreen() {
                     size={114}
                     strokeWidth={1.8}
                     dashArray="52 24 14 20"
-                    startColor="#38BDF8"
-                    endColor="#6366F1"
-                    dotColor="#67E8F9"
+                    startColor={isDark ? "#38BDF8" : colors.cyan}
+                    endColor={colors.indigo}
+                    dotColor={isDark ? "#67E8F9" : colors.cyan}
                   />
                 </Animated.View>
 
                 <View style={styles.coreBadge}>
-                  <Sparkles size={28} color="#E9D5FF" />
+                  <Sparkles size={28} color={colors.purpleText} />
                   <View style={styles.coreMiniWand}>
-                    <Wand2 size={12} color="#67E8F9" />
+                    <Wand2 size={12} color={colors.cyanText} />
                   </View>
                 </View>
               </View>
@@ -499,13 +507,13 @@ export default function TailoringScreen() {
               {request ? (
                 <View style={styles.pillsRow}>
                   <View style={styles.modelPill}>
-                    <Cpu size={12} color="#E9D5FF" />
+                    <Cpu size={12} color={colors.purpleText} />
                     <Text style={[styles.modelPillText, WEB_SANS]}>
                       {resolveModelDisplayName(request.model, availableModels)}
                     </Text>
                   </View>
                   <View style={styles.tonePill}>
-                    <Sliders size={12} color="#C7D2FE" />
+                    <Sliders size={12} color={colors.indigoText} />
                     <Text style={[styles.tonePillText, WEB_SANS]}>
                       {request.tone}
                     </Text>
@@ -533,9 +541,9 @@ export default function TailoringScreen() {
                           x2="100%"
                           y2="0%"
                         >
-                          <Stop offset="0%" stopColor="#38BDF8" />
-                          <Stop offset="50%" stopColor="#6366F1" />
-                          <Stop offset="100%" stopColor="#A855F7" />
+                          <Stop offset="0%" stopColor={isDark ? "#38BDF8" : colors.cyan} />
+                          <Stop offset="50%" stopColor={colors.indigo} />
+                          <Stop offset="100%" stopColor={colors.purple} />
                         </LinearGradient>
                       </Defs>
                       <Rect
@@ -565,304 +573,310 @@ export default function TailoringScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  safeArea: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 480,
-    alignSelf: "center",
-  },
-  topBar: {
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
-  cancelBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-  },
-  cancelText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 22,
-    paddingBottom: 42,
-  },
-  waitingWrap: {
-    alignItems: "center",
-    gap: 16,
-  },
-  orbitalStage: {
-    width: 172,
-    height: 172,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  pulseHalo: {
-    position: "absolute",
-    width: 136,
-    height: 136,
-    borderRadius: 68,
-    backgroundColor: "rgba(99, 102, 241, 0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(168, 85, 247, 0.35)",
-  },
-  orbitalLayer: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  coreBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#141A2E",
-    borderWidth: 1.5,
-    borderColor: "rgba(168, 85, 247, 0.62)",
-    alignItems: "center",
-    justifyContent: "center",
-    ...(Platform.OS === "web"
-      ? ({
-          boxShadow: "0 0 28px rgba(124, 93, 250, 0.45)",
-        } as unknown as Record<string, string>)
-      : {
-          shadowColor: "#7C5DFA",
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.45,
-          shadowRadius: 16,
-          elevation: 8,
-        }),
-  },
-  coreMiniWand: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#0F172A",
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    textAlign: "center",
-    letterSpacing: -0.4,
-  },
-  targetSubtitle: {
-    fontSize: 14.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
-    paddingHorizontal: 10,
-  },
-  pillsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  modelPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  modelPillText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#E9D5FF",
-  },
-  tonePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: COLORS.indigoSoft,
-    borderWidth: 1,
-    borderColor: COLORS.indigoBorder,
-  },
-  tonePillText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#C7D2FE",
-  },
-  progressCard: {
-    width: "100%",
-    marginTop: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 16,
-    gap: 14,
-  },
-  progressTrack: {
-    width: "100%",
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: "hidden",
-  },
-  progressFillWrap: {
-    height: "100%",
-    borderRadius: 999,
-    overflow: "hidden",
-    backgroundColor: COLORS.indigo,
-  },
-  quipBox: {
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quipText: {
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-    textAlign: "center",
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 20,
-    alignItems: "center",
-    gap: 12,
-  },
-  errorCard: {
-    borderColor: COLORS.roseBorder,
-  },
-  warningIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.amberSoft,
-    borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  errorIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    textAlign: "center",
-  },
-  cardBody: {
-    fontSize: 13.5,
-    lineHeight: 20,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-  },
-  errorSubtitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    textAlign: "center",
-  },
-  errorMsgBox: {
-    width: "100%",
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-    borderRadius: 10,
-    padding: 12,
-  },
-  errorMsgText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#FDA4AF",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  errorActions: {
-    width: "100%",
-    gap: 10,
-    marginTop: 4,
-  },
-  primaryBtn: {
-    width: "100%",
-    height: 46,
-    borderRadius: 12,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
-  },
-  btnInner: {
-    position: "relative",
-    zIndex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  primaryBtnText: {
-    position: "relative",
-    zIndex: 2,
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  secondaryBtn: {
-    width: "100%",
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.authBg,
+    },
+    safeArea: {
+      flex: 1,
+      width: "100%",
+      maxWidth: 480,
+      alignSelf: "center",
+    },
+    topBar: {
+      paddingHorizontal: 18,
+      paddingTop: 10,
+      paddingBottom: 6,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    cancelBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.headerBtnBorder,
+      backgroundColor: colors.headerBtnBg,
+      ...getCardElevation(isDark),
+    },
+    cancelText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingHorizontal: 22,
+      paddingBottom: 42,
+    },
+    waitingWrap: {
+      alignItems: "center",
+      gap: 16,
+    },
+    orbitalStage: {
+      width: 172,
+      height: 172,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 4,
+    },
+    pulseHalo: {
+      position: "absolute",
+      width: 136,
+      height: 136,
+      borderRadius: 68,
+      backgroundColor: isDark ? "rgba(99, 102, 241, 0.22)" : "rgba(79, 70, 229, 0.12)",
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(168, 85, 247, 0.35)" : colors.indigoBorder,
+    },
+    orbitalLayer: {
+      position: "absolute",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    coreBadge: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1.5,
+      borderColor: colors.indigoBorder,
+      alignItems: "center",
+      justifyContent: "center",
+      ...(Platform.OS === "web"
+        ? ({
+            boxShadow: isDark
+              ? "0 0 28px rgba(124, 93, 250, 0.45)"
+              : "0 8px 22px rgba(79, 70, 229, 0.18)",
+          } as unknown as Record<string, string>)
+        : {
+            shadowColor: isDark ? "#7C5DFA" : colors.indigo,
+            shadowOffset: { width: 0, height: isDark ? 0 : 4 },
+            shadowOpacity: isDark ? 0.45 : 0.18,
+            shadowRadius: isDark ? 16 : 12,
+            elevation: isDark ? 8 : 4,
+          }),
+    },
+    coreMiniWand: {
+      position: "absolute",
+      right: -2,
+      bottom: -2,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cyanBorder,
+      alignItems: "center",
+      justifyContent: "center",
+      ...getCardElevation(isDark),
+    },
+    mainTitle: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: colors.textPrimary,
+      textAlign: "center",
+      letterSpacing: -0.4,
+    },
+    targetSubtitle: {
+      fontSize: 14.5,
+      fontWeight: "600",
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 20,
+      paddingHorizontal: 10,
+    },
+    pillsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    modelPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    modelPillText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.purpleText,
+    },
+    tonePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: colors.indigoSoft,
+      borderWidth: 1,
+      borderColor: colors.indigoBorder,
+    },
+    tonePillText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.indigoText,
+    },
+    progressCard: {
+      width: "100%",
+      marginTop: 8,
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 16,
+      gap: 14,
+      ...getCardElevation(isDark),
+    },
+    progressTrack: {
+      width: "100%",
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.border,
+      overflow: "hidden",
+    },
+    progressFillWrap: {
+      height: "100%",
+      borderRadius: 999,
+      overflow: "hidden",
+      backgroundColor: colors.indigo,
+    },
+    quipBox: {
+      minHeight: 40,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    quipText: {
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: "500",
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 20,
+      alignItems: "center",
+      gap: 12,
+      ...getCardElevation(isDark),
+    },
+    errorCard: {
+      borderColor: colors.roseBorder,
+    },
+    warningIconBadge: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: colors.amberSoft,
+      borderWidth: 1,
+      borderColor: colors.amberBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    errorIconBadge: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: colors.textPrimary,
+      textAlign: "center",
+    },
+    cardBody: {
+      fontSize: 13.5,
+      lineHeight: 20,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    errorSubtitle: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    errorMsgBox: {
+      width: "100%",
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+      borderRadius: 10,
+      padding: 12,
+    },
+    errorMsgText: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.roseText,
+      fontWeight: "600",
+      textAlign: "center",
+    },
+    errorActions: {
+      width: "100%",
+      gap: 10,
+      marginTop: 4,
+    },
+    primaryBtn: {
+      width: "100%",
+      height: 46,
+      borderRadius: 12,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(79, 70, 229, 0.2)",
+    },
+    btnInner: {
+      position: "relative",
+      zIndex: 2,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    primaryBtnText: {
+      position: "relative",
+      zIndex: 2,
+      fontSize: 14.5,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    secondaryBtn: {
+      width: "100%",
+      height: 44,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      backgroundColor: colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    secondaryBtnText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.textPrimary,
+    },
+  });
+}

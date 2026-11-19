@@ -13,6 +13,7 @@ pydantic>=2.7.0
 sentry-sdk[fastapi]
 sse-starlette
 PyJWT
+slowapi>=0.1.9
 python-multipart
 python-dotenv
 pytest

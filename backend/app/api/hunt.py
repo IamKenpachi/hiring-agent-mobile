@@ -8,7 +8,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +21,13 @@ from app.api._tailor_helper import (
     serialize_tailored_output,
 )
 from app.core.config import resolve_gemini_model
-from app.core.security import CurrentUser, get_current_user, get_gemini_api_key
+from app.core.rate_limit import limiter
+from app.core.security import (
+    CurrentUser,
+    enforce_trial_quota_if_needed,
+    get_current_user,
+    get_gemini_api_key,
+)
 from app.db import session as db_session
 from app.db.models import Profile, RankedJob, SearchRun
 from app.db.session import get_db
@@ -259,15 +265,20 @@ def get_platforms() -> Dict[str, List[str]]:
 
 
 @router.post("/start")
+@limiter.limit("15/hour")
 def start_hunt(
+    request: Request,
     req: HuntStartRequest,
     background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     gemini_api_key: str = Depends(get_gemini_api_key),
+    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-Api-Key"),
     x_gemini_model: Optional[str] = Header(None, alias="X-Gemini-Model"),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Create a JobSpy SearchRun and execute scraping + 4-score ranking (sync or background)."""
+    _ = request
+    enforce_trial_quota_if_needed(db, current_user.id, x_gemini_api_key)
     profile = _resolve_profile_for_user(db, current_user.id, req.profile_id)
     active_model = resolve_gemini_model(req.model or x_gemini_model)
     platforms = [p.strip().lower() for p in (req.platforms or []) if p.strip()] or list(PRIMARY_JOBSPY_SITES)
@@ -422,10 +433,12 @@ def tailor_ranked_job(
     req: Optional[JobTailorRequest] = None,
     current_user: CurrentUser = Depends(get_current_user),
     gemini_api_key: str = Depends(get_gemini_api_key),
+    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-Api-Key"),
     x_gemini_model: Optional[str] = Header(None, alias="X-Gemini-Model"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Run ADK ApplicationTailorPipeline for a hunted job and save the TailoredOutput."""
+    enforce_trial_quota_if_needed(db, current_user.id, x_gemini_api_key)
     job = (
         db.execute(
             select(RankedJob).where(RankedJob.id == job_id, RankedJob.user_id == current_user.id)
@@ -457,5 +470,6 @@ def tailor_ranked_job(
         model_name=active_model,
         api_key=gemini_api_key,
         ranked_job_id=job.id,
+        provided_header_key=x_gemini_api_key,
     )
     return serialize_tailored_output(output_row)

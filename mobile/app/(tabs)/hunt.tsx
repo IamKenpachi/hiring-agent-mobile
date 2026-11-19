@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -34,8 +34,13 @@ import {
   Trophy,
   UserCheck,
 } from "lucide-react-native";
-import { COLORS, getScoreTheme } from "../../src/constants/theme";
+import {
+  getCardElevation,
+  getScoreTheme,
+  type ThemeColors,
+} from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError } from "../../src/lib/api";
 import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import {
@@ -43,6 +48,7 @@ import {
   OnboardingAmbientGlow,
   WEB_SANS,
 } from "../../src/components/OnboardingGraphics";
+import { ThemeToggleButton } from "../../src/components/ThemeToggleButton";
 import type { RankedJob, SearchRun } from "../../src/types";
 
 type HuntStage = "config" | "progress" | "results";
@@ -159,14 +165,15 @@ function StepIcon({
   icon: ExecutionStepItem["icon"];
   state: StepVisualState;
 }) {
+  const { colors } = useTheme();
   const color =
     state === "done"
-      ? "#34D399"
+      ? colors.emeraldText
       : state === "running"
-        ? "#22D3EE"
+        ? colors.cyanText
         : state === "failed"
-          ? "#FB7185"
-          : "#64748B";
+          ? colors.roseText
+          : colors.textMuted;
   switch (icon) {
     case "globe":
       return <Globe size={21} color={color} />;
@@ -182,6 +189,8 @@ function StepIcon({
 export default function HuntScreen() {
   const router = useRouter();
   const { activeProfile, selectedModel, availableModels, refreshTelemetry } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [stage, setStage] = useState<HuntStage>("config");
   const [query, setQuery] = useState("Data Analyst");
@@ -462,18 +471,21 @@ export default function HuntScreen() {
         <View style={styles.stageContainer}>
           <View style={styles.headerBar}>
             <Text style={[styles.headerTitle, WEB_SANS]}>JobSpy Hunter</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Home"
-              onPress={() => router.replace("/home")}
-              style={({ pressed }) => [
-                styles.headerPillBtn,
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <Home size={14} color={COLORS.textPrimary} />
-              <Text style={[styles.headerPillText, WEB_SANS]}>Home</Text>
-            </Pressable>
+            <View style={styles.headerRightActions}>
+              <ThemeToggleButton size="compact" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Home"
+                onPress={() => router.replace("/home")}
+                style={({ pressed }) => [
+                  styles.headerPillBtn,
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <Home size={14} color={colors.textPrimary} />
+                <Text style={[styles.headerPillText, WEB_SANS]}>Home</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -486,7 +498,7 @@ export default function HuntScreen() {
             <View style={styles.contextBar}>
               <View style={styles.contextItem}>
                 <View style={styles.profileDotWrap}>
-                  <UserCheck size={14} color={COLORS.emerald} />
+                  <UserCheck size={14} color={colors.emerald} />
                 </View>
                 <Text style={[styles.contextText, WEB_SANS]} numberOfLines={1}>
                   {activeProfileName}
@@ -502,7 +514,7 @@ export default function HuntScreen() {
             {/* Configuration Card */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <Radar size={18} color="#818CF8" />
+                <Radar size={18} color={colors.indigo} />
                 <Text style={[styles.cardTitle, WEB_SANS]}>
                   Multi-Board JobSpy Configuration
                 </Text>
@@ -511,12 +523,12 @@ export default function HuntScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={[styles.label, WEB_SANS]}>Job Title / Role Query *</Text>
                 <View style={styles.inputRow}>
-                  <Briefcase size={15} color={COLORS.textMuted} />
+                  <Briefcase size={15} color={colors.textMuted} />
                   <TextInput
                     value={query}
                     onChangeText={setQuery}
                     placeholder="e.g. Senior Data Analyst, Analytics Engineer"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={[styles.input, WEB_SANS]}
                   />
                 </View>
@@ -525,12 +537,12 @@ export default function HuntScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={[styles.label, WEB_SANS]}>Location</Text>
                 <View style={styles.inputRow}>
-                  <MapPin size={15} color={COLORS.textMuted} />
+                  <MapPin size={15} color={colors.textMuted} />
                   <TextInput
                     value={location}
                     onChangeText={setLocation}
                     placeholder="e.g. London, UK or Remote"
-                    placeholderTextColor={COLORS.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={[styles.input, WEB_SANS]}
                   />
                 </View>
@@ -588,7 +600,7 @@ export default function HuntScreen() {
               <View style={styles.fieldGroup}>
                 <View style={styles.rowBetween}>
                   <View style={styles.labelIconRow}>
-                    <Clock size={13} color={COLORS.amber} />
+                    <Clock size={13} color={colors.amber} />
                     <Text style={[styles.label, WEB_SANS]}>Posting Recency</Text>
                   </View>
                 </View>
@@ -617,7 +629,7 @@ export default function HuntScreen() {
               <View style={styles.fieldGroup}>
                 <View style={styles.rowBetween}>
                   <View style={styles.labelIconRow}>
-                    <SlidersHorizontal size={13} color={COLORS.purple} />
+                    <SlidersHorizontal size={13} color={colors.purple} />
                     <Text style={[styles.label, WEB_SANS]}>Top Ranked Results (N)</Text>
                   </View>
                   <View style={styles.stepper}>
@@ -625,14 +637,14 @@ export default function HuntScreen() {
                       onPress={() => setRequestedTopN((n) => Math.max(1, n - 1))}
                       style={styles.stepBtn}
                     >
-                      <Minus size={13} color={COLORS.textPrimary} />
+                      <Minus size={13} color={colors.textPrimary} />
                     </Pressable>
                     <Text style={[styles.stepVal, WEB_SANS]}>{requestedTopN}</Text>
                     <Pressable
                       onPress={() => setRequestedTopN((n) => Math.min(50, n + 1))}
                       style={styles.stepBtn}
                     >
-                      <Plus size={13} color={COLORS.textPrimary} />
+                      <Plus size={13} color={colors.textPrimary} />
                     </Pressable>
                   </View>
                 </View>
@@ -661,7 +673,7 @@ export default function HuntScreen() {
               <View style={styles.fieldGroup}>
                 <View style={styles.rowBetween}>
                   <View style={styles.labelIconRow}>
-                    <Globe size={13} color={COLORS.cyan} />
+                    <Globe size={13} color={colors.cyan} />
                     <Text style={[styles.label, WEB_SANS]}>
                       JobSpy Platforms ({selectedPlatforms.length}/8 selected)
                     </Text>
@@ -683,7 +695,7 @@ export default function HuntScreen() {
                             styles.chipText,
                             WEB_SANS,
                             styles.boardChipLabel,
-                            active && styles.chipTextActive,
+                            active && styles.boardChipTextActive,
                           ]}
                         >
                           {b.label}
@@ -701,9 +713,9 @@ export default function HuntScreen() {
                     Regional JobSpy Boards (Bayt, Naukri, BDJobs)
                   </Text>
                   {showRegional ? (
-                    <ChevronUp size={15} color={COLORS.textSecondary} />
+                    <ChevronUp size={15} color={colors.textSecondary} />
                   ) : (
-                    <ChevronDown size={15} color={COLORS.textSecondary} />
+                    <ChevronDown size={15} color={colors.textSecondary} />
                   )}
                 </Pressable>
 
@@ -723,7 +735,7 @@ export default function HuntScreen() {
                               styles.chipText,
                               WEB_SANS,
                               styles.boardChipLabel,
-                              active && styles.chipTextActive,
+                              active && styles.boardChipTextActive,
                             ]}
                           >
                             {b.label}
@@ -783,7 +795,7 @@ export default function HuntScreen() {
                 onPress={() => setStage("config")}
                 style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
               >
-                <ArrowLeft size={20} color={COLORS.textPrimary} />
+                <ArrowLeft size={20} color={colors.textPrimary} />
               </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.headerTitle, WEB_SANS]}>Job Hunt Progress</Text>
@@ -791,6 +803,9 @@ export default function HuntScreen() {
                   {query.trim() || "Job Hunt"} • {location.trim() || "Remote"}
                 </Text>
               </View>
+            </View>
+            <View style={styles.headerRightActions}>
+              <ThemeToggleButton size="compact" />
             </View>
           </View>
 
@@ -811,7 +826,7 @@ export default function HuntScreen() {
                   ) : null}
                 </Text>
                 {!isCompleted && !isFailed ? (
-                  <ActivityIndicator size="small" color="#22D3EE" />
+                  <ActivityIndicator size="small" color={colors.cyan} />
                 ) : null}
               </View>
 
@@ -874,12 +889,12 @@ export default function HuntScreen() {
                         >
                           {isDone ? (
                             <>
-                              <Check size={11} color="#34D399" />
+                              <Check size={11} color={colors.emeraldText} />
                               <Text style={[styles.stepStatusTextDone, WEB_SANS]}>Done</Text>
                             </>
                           ) : isRunning ? (
                             <>
-                              <ActivityIndicator size={10} color="#22D3EE" />
+                              <ActivityIndicator size={10} color={colors.cyanText} />
                               <Text style={[styles.stepStatusTextRunning, WEB_SANS]}>
                                 Running
                               </Text>
@@ -909,7 +924,7 @@ export default function HuntScreen() {
             {/* Non-blocking Rate-Limit / Partial Board Warnings */}
             {Array.isArray(activeRun?.warnings) && activeRun.warnings.length > 0 ? (
               <View style={styles.warningBanner}>
-                <AlertTriangle size={15} color={COLORS.amber} style={{ marginTop: 1 }} />
+                <AlertTriangle size={15} color={colors.amberText} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={[styles.warningTitle, WEB_SANS]}>Partial Board Warning</Text>
                   {activeRun.warnings.map((warn, idx) => (
@@ -994,24 +1009,27 @@ export default function HuntScreen() {
                 onPress={() => setStage("progress")}
                 style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
               >
-                <ArrowLeft size={20} color={COLORS.textPrimary} />
+                <ArrowLeft size={20} color={colors.textPrimary} />
               </Pressable>
               <Text style={[styles.headerTitle, WEB_SANS]}>
                 Top {rankedJobs.length || requestedTopN} Matches
               </Text>
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="New Hunt"
-              onPress={() => setStage("config")}
-              style={({ pressed }) => [
-                styles.headerPillBtn,
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <Text style={[styles.headerPillText, WEB_SANS]}>New Hunt</Text>
-            </Pressable>
+            <View style={styles.headerRightActions}>
+              <ThemeToggleButton size="compact" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="New Hunt"
+                onPress={() => setStage("config")}
+                style={({ pressed }) => [
+                  styles.headerPillBtn,
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <Text style={[styles.headerPillText, WEB_SANS]}>New Hunt</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -1087,7 +1105,7 @@ export default function HuntScreen() {
                       <View style={styles.jobMiddleRow}>
                         <View style={styles.jobMiddleLeft}>
                           <View style={styles.salaryRow}>
-                            <DollarSign size={13} color="#34D399" />
+                            <DollarSign size={13} color={colors.emeraldText} />
                             <Text style={[styles.salaryText, WEB_SANS]}>
                               {job.salary || "Salary not listed"}
                             </Text>
@@ -1101,13 +1119,13 @@ export default function HuntScreen() {
                             {cleanMarkdownSnippet(job.description)}
                           </Text>
                         </View>
-                        <ChevronRight size={17} color="#64748B" />
+                        <ChevronRight size={17} color={colors.textMuted} />
                       </View>
 
                       {/* 4 Equal-Width Score Cards */}
                       <View style={styles.scoresGrid}>
                         {scoreItems.map((item) => {
-                          const theme = getScoreTheme(item.score);
+                          const theme = getScoreTheme(item.score, colors);
                           const rounded = Math.max(
                             0,
                             Math.min(100, Math.round(item.score || 0))
@@ -1133,7 +1151,7 @@ export default function HuntScreen() {
                                 style={[
                                   styles.scoreBoxValue,
                                   WEB_SANS,
-                                  { color: theme.color },
+                                  { color: theme.textColor },
                                 ]}
                               >
                                 {rounded}%
@@ -1154,666 +1172,685 @@ export default function HuntScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screenRoot: {
-    flex: 1,
-    backgroundColor: "#070A12",
-  },
-  stageContainer: {
-    flex: 1,
-  },
-  flexScroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 28,
-    gap: 13,
-  },
-  headerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 10,
-    gap: 12,
-  },
-  headerLeftGroup: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  backBtn: {
-    width: 28,
-    height: 32,
-    alignItems: "flex-start",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 21,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-  headerSubtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 12.5,
-    marginTop: 1,
-  },
-  headerPillBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(22, 31, 51, 0.85)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 999,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-  },
-  headerPillText: {
-    color: COLORS.textPrimary,
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  contextBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(15, 22, 36, 0.90)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    gap: 8,
-  },
-  contextItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-  profileDotWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(16, 185, 129, 0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  contextText: {
-    color: COLORS.textPrimary,
-    fontSize: 13.5,
-    fontWeight: "600",
-    flex: 1,
-  },
-  modelPill: {
-    backgroundColor: "rgba(124, 93, 250, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(167, 139, 250, 0.45)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    maxWidth: 170,
-  },
-  modelPillText: {
-    color: "#E9D5FF",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  card: {
-    backgroundColor: "rgba(15, 22, 36, 0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 18,
-    padding: 14,
-    gap: 11,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15.5,
-    fontWeight: "700",
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  labelIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  label: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#090E1A",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 42,
-  },
-  input: {
-    flex: 1,
-    color: COLORS.textPrimary,
-    fontSize: 14,
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6.5,
-    borderRadius: 999,
-    backgroundColor: "#0B111E",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-  },
-  chipActive: {
-    backgroundColor: "rgba(99, 102, 241, 0.22)",
-    borderColor: "rgba(129, 140, 248, 0.60)",
-  },
-  chipText: {
-    color: COLORS.textSecondary,
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  chipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#0B111E",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  stepBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-  },
-  stepVal: {
-    color: COLORS.textPrimary,
-    fontSize: 13.5,
-    fontWeight: "800",
-    minWidth: 20,
-    textAlign: "center",
-  },
-  boardChip: {
-    overflow: "hidden",
-    position: "relative",
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#0B111E",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.11)",
-  },
-  boardChipActive: {
-    borderColor: "rgba(167, 139, 250, 0.72)",
-  },
-  boardChipLabel: {
-    position: "relative",
-    zIndex: 2,
-  },
-  regionalToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#0B111E",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginTop: 2,
-  },
-  regionalToggleText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  errorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-    borderRadius: 10,
-    padding: 10,
-  },
-  errorText: {
-    color: "#FDA4AF",
-    fontSize: 12.5,
-  },
-  gradientCta: {
-    height: 50,
-    borderRadius: 15,
-    overflow: "hidden",
-    position: "relative",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 2,
-  },
-  gradientCtaInner: {
-    position: "relative",
-    zIndex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  gradientCtaText: {
-    color: "#FFFFFF",
-    fontSize: 15.5,
-    fontWeight: "800",
-  },
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  const cardElevation = getCardElevation(isDark);
+  return StyleSheet.create({
+    screenRoot: {
+      flex: 1,
+      backgroundColor: colors.authBg,
+    },
+    stageContainer: {
+      flex: 1,
+    },
+    flexScroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 6,
+      paddingBottom: 28,
+      gap: 13,
+    },
+    headerBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 10,
+      gap: 12,
+    },
+    headerLeftGroup: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    headerRightActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    backBtn: {
+      width: 28,
+      height: 32,
+      alignItems: "flex-start",
+      justifyContent: "center",
+    },
+    headerTitle: {
+      color: colors.textPrimary,
+      fontSize: 21,
+      fontWeight: "800",
+      letterSpacing: -0.3,
+    },
+    headerSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 12.5,
+      marginTop: 1,
+    },
+    headerPillBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.headerBtnBg,
+      borderWidth: 1,
+      borderColor: colors.headerBtnBorder,
+      borderRadius: 999,
+      paddingHorizontal: 13,
+      paddingVertical: 7,
+      ...cardElevation,
+    },
+    headerPillText: {
+      color: colors.textPrimary,
+      fontSize: 12.5,
+      fontWeight: "600",
+    },
+    contextBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      gap: 8,
+      ...cardElevation,
+    },
+    contextItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flex: 1,
+    },
+    profileDotWrap: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.emeraldSoft,
+      borderWidth: 1,
+      borderColor: colors.emeraldBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    contextText: {
+      color: colors.textPrimary,
+      fontSize: 13.5,
+      fontWeight: "600",
+      flex: 1,
+    },
+    modelPill: {
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      maxWidth: 170,
+    },
+    modelPillText: {
+      color: colors.purpleText,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 18,
+      padding: 14,
+      gap: 11,
+      ...cardElevation,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontSize: 15.5,
+      fontWeight: "700",
+    },
+    fieldGroup: {
+      gap: 6,
+    },
+    rowBetween: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    labelIconRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    label: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    inputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 42,
+    },
+    input: {
+      flex: 1,
+      color: colors.textPrimary,
+      fontSize: 14,
+    },
+    chipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6.5,
+      borderRadius: 999,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    chipActive: {
+      backgroundColor: colors.indigoSoft,
+      borderColor: colors.indigoBorder,
+    },
+    chipText: {
+      color: colors.textSecondary,
+      fontSize: 12.5,
+      fontWeight: "600",
+    },
+    chipTextActive: {
+      color: colors.indigoText,
+      fontWeight: "700",
+    },
+    stepper: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    stepBtn: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surfaceElevated,
+    },
+    stepVal: {
+      color: colors.textPrimary,
+      fontSize: 13.5,
+      fontWeight: "800",
+      minWidth: 20,
+      textAlign: "center",
+    },
+    boardChip: {
+      overflow: "hidden",
+      position: "relative",
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    boardChipActive: {
+      borderColor: colors.purpleBorder,
+    },
+    boardChipLabel: {
+      position: "relative",
+      zIndex: 2,
+    },
+    boardChipTextActive: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+    },
+    regionalToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginTop: 2,
+    },
+    regionalToggleText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    errorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+      borderRadius: 10,
+      padding: 10,
+    },
+    errorText: {
+      color: colors.roseText,
+      fontSize: 12.5,
+    },
+    gradientCta: {
+      height: 50,
+      borderRadius: 15,
+      overflow: "hidden",
+      position: "relative",
+      justifyContent: "center",
+      alignItems: "center",
+      marginTop: 2,
+    },
+    gradientCtaInner: {
+      position: "relative",
+      zIndex: 2,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    gradientCtaText: {
+      color: "#FFFFFF",
+      fontSize: 15.5,
+      fontWeight: "800",
+    },
 
-  /* Screen 2: Progress */
-  summaryCard: {
-    backgroundColor: "rgba(15, 24, 38, 0.94)",
-    borderWidth: 1,
-    borderColor: "rgba(45, 212, 191, 0.25)",
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-  },
-  summaryCardFailed: {
-    borderColor: COLORS.roseBorder,
-  },
-  summaryTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  summaryHeadline: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: "700",
-    flex: 1,
-  },
-  summarySubCount: {
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    overflow: "hidden",
-  },
-  progressBarWrap: {
-    height: "100%",
-    borderRadius: 999,
-    overflow: "hidden",
-    minWidth: 10,
-  },
-  stepsStack: {
-    gap: 11,
-  },
-  stepCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-    backgroundColor: "rgba(15, 22, 36, 0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.09)",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  stepCardDone: {
-    backgroundColor: "rgba(11, 36, 38, 0.90)",
-    borderColor: "rgba(16, 185, 129, 0.50)",
-  },
-  stepCardRunning: {
-    backgroundColor: "rgba(12, 30, 50, 0.94)",
-    borderColor: "rgba(34, 211, 238, 0.65)",
-  },
-  stepCardFailed: {
-    backgroundColor: "rgba(46, 16, 28, 0.90)",
-    borderColor: COLORS.roseBorder,
-  },
-  stepIconRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepIconRingDone: {
-    backgroundColor: "rgba(16, 185, 129, 0.14)",
-    borderColor: "rgba(52, 211, 153, 0.35)",
-  },
-  stepIconRingRunning: {
-    backgroundColor: "rgba(6, 182, 212, 0.16)",
-    borderColor: "rgba(34, 211, 238, 0.42)",
-  },
-  stepIconRingFailed: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-  },
-  stepBody: {
-    flex: 1,
-    gap: 3,
-  },
-  stepTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  stepKicker: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  stepKickerDone: {
-    color: "#34D399",
-  },
-  stepKickerRunning: {
-    color: "#22D3EE",
-  },
-  stepKickerFailed: {
-    color: "#FB7185",
-  },
-  stepStatusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-  },
-  stepStatusPillDone: {
-    backgroundColor: "rgba(16, 185, 129, 0.18)",
-    borderColor: "rgba(52, 211, 153, 0.45)",
-  },
-  stepStatusPillRunning: {
-    backgroundColor: "rgba(6, 182, 212, 0.18)",
-    borderColor: "rgba(34, 211, 238, 0.48)",
-  },
-  stepStatusPillFailed: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-  },
-  stepStatusTextDone: {
-    color: "#34D399",
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  stepStatusTextRunning: {
-    color: "#22D3EE",
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  stepStatusTextFailed: {
-    color: "#FDA4AF",
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  stepStatusTextPending: {
-    color: COLORS.textMuted,
-    fontSize: 10.5,
-    fontWeight: "600",
-  },
-  stepTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 14.5,
-    fontWeight: "700",
-  },
-  stepSubtitle: {
-    color: "#CBD5E1",
-    fontSize: 12,
-    lineHeight: 16.5,
-    opacity: 0.86,
-  },
-  warningBanner: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: COLORS.amberSoft,
-    borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-    borderRadius: 12,
-    padding: 11,
-  },
-  warningTitle: {
-    color: "#FCD34D",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  warningBody: {
-    color: "#FDE68A",
-    fontSize: 11.5,
-    lineHeight: 16,
-  },
-  failureBox: {
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  failureActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  secondaryOutlineBtn: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.18)",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: "center",
-  },
-  secondaryOutlineText: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  retryBtn: {
-    flex: 1,
-    borderRadius: 999,
-    backgroundColor: COLORS.indigo,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: "center",
-  },
-  retryBtnText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  completionActions: {
-    marginTop: 6,
-    gap: 10,
-    alignItems: "center",
-  },
-  showResultsCta: {
-    width: "100%",
-    height: 50,
-    borderRadius: 999,
-    overflow: "hidden",
-    position: "relative",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  editConfigLink: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-  },
-  editConfigLinkText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-    textDecorationLine: "underline",
-  },
+    /* Screen 2: Progress */
+    summaryCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cyanBorder,
+      borderRadius: 16,
+      padding: 14,
+      gap: 10,
+      ...cardElevation,
+    },
+    summaryCardFailed: {
+      borderColor: colors.roseBorder,
+    },
+    summaryTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    summaryHeadline: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "700",
+      flex: 1,
+    },
+    summarySubCount: {
+      color: colors.textSecondary,
+      fontWeight: "500",
+    },
+    progressTrack: {
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : colors.border,
+      overflow: "hidden",
+    },
+    progressBarWrap: {
+      height: "100%",
+      borderRadius: 999,
+      overflow: "hidden",
+      minWidth: 10,
+    },
+    stepsStack: {
+      gap: 11,
+    },
+    stepCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 13,
+      backgroundColor: colors.surfaceCard,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      ...cardElevation,
+    },
+    stepCardDone: {
+      backgroundColor: isDark ? "rgba(11, 36, 38, 0.90)" : colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+    },
+    stepCardRunning: {
+      backgroundColor: isDark ? "rgba(12, 30, 50, 0.94)" : colors.cyanSoft,
+      borderColor: colors.cyanBorder,
+    },
+    stepCardFailed: {
+      backgroundColor: isDark ? "rgba(46, 16, 28, 0.90)" : colors.roseSoft,
+      borderColor: colors.roseBorder,
+    },
+    stepIconRing: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stepIconRingDone: {
+      backgroundColor: colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+    },
+    stepIconRingRunning: {
+      backgroundColor: colors.cyanSoft,
+      borderColor: colors.cyanBorder,
+    },
+    stepIconRingFailed: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+    },
+    stepBody: {
+      flex: 1,
+      gap: 3,
+    },
+    stepTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    stepKicker: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "600",
+    },
+    stepKickerDone: {
+      color: colors.emeraldText,
+    },
+    stepKickerRunning: {
+      color: colors.cyanText,
+    },
+    stepKickerFailed: {
+      color: colors.roseText,
+    },
+    stepStatusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    stepStatusPillDone: {
+      backgroundColor: colors.emeraldSoft,
+      borderColor: colors.emeraldBorder,
+    },
+    stepStatusPillRunning: {
+      backgroundColor: colors.cyanSoft,
+      borderColor: colors.cyanBorder,
+    },
+    stepStatusPillFailed: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+    },
+    stepStatusTextDone: {
+      color: colors.emeraldText,
+      fontSize: 10.5,
+      fontWeight: "700",
+    },
+    stepStatusTextRunning: {
+      color: colors.cyanText,
+      fontSize: 10.5,
+      fontWeight: "700",
+    },
+    stepStatusTextFailed: {
+      color: colors.roseText,
+      fontSize: 10.5,
+      fontWeight: "700",
+    },
+    stepStatusTextPending: {
+      color: colors.textMuted,
+      fontSize: 10.5,
+      fontWeight: "600",
+    },
+    stepTitle: {
+      color: colors.textPrimary,
+      fontSize: 14.5,
+      fontWeight: "700",
+    },
+    stepSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 16.5,
+    },
+    warningBanner: {
+      flexDirection: "row",
+      gap: 8,
+      backgroundColor: colors.amberSoft,
+      borderWidth: 1,
+      borderColor: colors.amberBorder,
+      borderRadius: 12,
+      padding: 11,
+    },
+    warningTitle: {
+      color: colors.amberText,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    warningBody: {
+      color: colors.amberText,
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
+    failureBox: {
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    failureActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    secondaryOutlineBtn: {
+      flex: 1,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      backgroundColor: colors.headerBtnBg,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      alignItems: "center",
+    },
+    secondaryOutlineText: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    retryBtn: {
+      flex: 1,
+      borderRadius: 999,
+      backgroundColor: colors.indigo,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      alignItems: "center",
+    },
+    retryBtnText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    completionActions: {
+      marginTop: 6,
+      gap: 10,
+      alignItems: "center",
+    },
+    showResultsCta: {
+      width: "100%",
+      height: 50,
+      borderRadius: 999,
+      overflow: "hidden",
+      position: "relative",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    editConfigLink: {
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+    },
+    editConfigLinkText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: "600",
+      textDecorationLine: "underline",
+    },
 
-  /* Screen 3: Results */
-  resultsBanner: {
-    backgroundColor: "rgba(11, 42, 36, 0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.45)",
-    borderRadius: 15,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    gap: 2,
-  },
-  resultsBannerTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15.5,
-    fontWeight: "800",
-  },
-  resultsBannerSub: {
-    color: "#34D399",
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  emptyResultsCard: {
-    backgroundColor: "rgba(15, 22, 36, 0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 16,
-    padding: 20,
-    alignItems: "center",
-    gap: 10,
-  },
-  emptyResultsTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  emptyResultsSub: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  resultsList: {
-    gap: 11,
-  },
-  jobCard: {
-    backgroundColor: "rgba(15, 22, 36, 0.94)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
-    borderRadius: 16,
-    padding: 14,
-    gap: 9,
-  },
-  jobHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  jobTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  jobCompany: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-  },
-  platformBadge: {
-    backgroundColor: "rgba(6, 182, 212, 0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(34, 211, 238, 0.42)",
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  platformBadgeText: {
-    color: "#22D3EE",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-  jobMiddleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  jobMiddleLeft: {
-    flex: 1,
-    gap: 5,
-  },
-  salaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  salaryText: {
-    color: "#34D399",
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  jobDescSnippet: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  scoresGrid: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 2,
-  },
-  scoreBox: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-  },
-  scoreBoxLabel: {
-    color: "#CBD5E1",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  scoreBoxValue: {
-    fontSize: 13.5,
-    fontWeight: "800",
-  },
-});
+    /* Screen 3: Results */
+    resultsBanner: {
+      backgroundColor: isDark ? "rgba(11, 42, 36, 0.88)" : colors.emeraldSoft,
+      borderWidth: 1,
+      borderColor: colors.emeraldBorder,
+      borderRadius: 15,
+      paddingHorizontal: 15,
+      paddingVertical: 12,
+      gap: 2,
+      ...cardElevation,
+    },
+    resultsBannerTitle: {
+      color: colors.textPrimary,
+      fontSize: 15.5,
+      fontWeight: "800",
+    },
+    resultsBannerSub: {
+      color: colors.emeraldText,
+      fontSize: 12.5,
+      fontWeight: "600",
+    },
+    emptyResultsCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 20,
+      alignItems: "center",
+      gap: 10,
+      ...cardElevation,
+    },
+    emptyResultsTitle: {
+      color: colors.textPrimary,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    emptyResultsSub: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      textAlign: "center",
+    },
+    resultsList: {
+      gap: 11,
+    },
+    jobCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 14,
+      gap: 9,
+      ...cardElevation,
+    },
+    jobHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    jobTitle: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    jobCompany: {
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
+    platformBadge: {
+      backgroundColor: colors.cyanSoft,
+      borderWidth: 1,
+      borderColor: colors.cyanBorder,
+      borderRadius: 6,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+    },
+    platformBadgeText: {
+      color: colors.cyanText,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.4,
+    },
+    jobMiddleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    jobMiddleLeft: {
+      flex: 1,
+      gap: 5,
+    },
+    salaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    salaryText: {
+      color: colors.emeraldText,
+      fontSize: 12.5,
+      fontWeight: "600",
+    },
+    jobDescSnippet: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    scoresGrid: {
+      flexDirection: "row",
+      gap: 6,
+      marginTop: 2,
+    },
+    scoreBox: {
+      flex: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      paddingVertical: 6,
+      paddingHorizontal: 4,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 1,
+    },
+    scoreBoxLabel: {
+      color: colors.textSecondary,
+      fontSize: 10,
+      fontWeight: "600",
+    },
+    scoreBoxValue: {
+      fontSize: 13.5,
+      fontWeight: "800",
+    },
+  });
+}

@@ -1,12 +1,14 @@
 import "../global.css";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Sentry from "@sentry/react-native";
-import { COLORS } from "../src/constants/theme";
+import { ThemeToggleButton } from "../src/components/ThemeToggleButton";
+import type { ThemeColors } from "../src/constants/theme";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || "";
 
@@ -18,16 +20,21 @@ if (SENTRY_DSN) {
   });
 }
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  colors: ThemeColors;
+}
+
 interface ErrorBoundaryState {
   hasError: boolean;
   errorMessage: string;
 }
 
 class AppErrorBoundary extends React.Component<
-  { children: React.ReactNode },
+  ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  constructor(props: { children: React.ReactNode }) {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, errorMessage: "" };
   }
@@ -47,6 +54,7 @@ class AppErrorBoundary extends React.Component<
 
   render() {
     if (this.state.hasError) {
+      const styles = createStyles(this.props.colors);
       return (
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>Something went wrong</Text>
@@ -65,45 +73,63 @@ class AppErrorBoundary extends React.Component<
 }
 
 function AuthNavigationGuard() {
-  const { isReady, token, geminiApiKey, profiles } = useAuth();
+  const { isReady, token, geminiApiKey, trialMode, profiles } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (!isReady) return;
 
-    const segList: string[] = segments;
+    const segList: string[] = Array.isArray(segments) ? segments : [];
     const firstSegment = segList[0];
     const secondSegment = segList[1];
     const inAuthGroup = firstSegment === "(auth)";
     const onOnboarding = inAuthGroup && secondSegment === "onboarding";
     const onLogin = inAuthGroup && secondSegment === "login";
     const onWelcome = inAuthGroup && secondSegment === "welcome";
+    const isCallbackOrUnmatched =
+      firstSegment === "auth" ||
+      firstSegment === "+not-found" ||
+      firstSegment === "[...unmatched]";
+
+    const safeReplace = (href: Parameters<typeof router.replace>[0]) => {
+      try {
+        router.replace(href);
+      } catch {
+        // Ignore pre-mount navigation race on deep link cold start
+      }
+    };
 
     if (!token) {
+      if (firstSegment === "auth") {
+        safeReplace("/(auth)/login");
+        return;
+      }
       if (!onWelcome && !onLogin && !onOnboarding) {
-        router.replace("/(auth)/welcome");
+        safeReplace("/(auth)/welcome");
       }
       return;
     }
 
-    const needsOnboarding = !geminiApiKey.trim() || profiles.length === 0;
+    const needsOnboarding = (!geminiApiKey.trim() && !trialMode) || profiles.length === 0;
     if (needsOnboarding) {
       if (!onOnboarding) {
-        router.replace("/(auth)/onboarding");
+        safeReplace("/(auth)/onboarding");
       }
       return;
     }
 
-    if (inAuthGroup || !firstSegment) {
-      router.replace("/home");
+    if (inAuthGroup || !firstSegment || isCallbackOrUnmatched) {
+      safeReplace("/home");
     }
-  }, [isReady, token, geminiApiKey, profiles.length, segments, router]);
+  }, [isReady, token, geminiApiKey, trialMode, profiles.length, segments, router]);
 
   if (!isReady) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color={COLORS.indigo} />
+        <ActivityIndicator size="large" color={colors.indigo} />
         <Text style={styles.loadingText}>Initializing Command Center...</Text>
       </View>
     );
@@ -112,11 +138,20 @@ function AuthNavigationGuard() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: COLORS.background },
-        headerTintColor: COLORS.textPrimary,
-        headerTitleStyle: { fontWeight: "700", fontSize: 16 },
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.textPrimary,
+        headerTitleStyle: {
+          fontWeight: "700",
+          fontSize: 16,
+          color: colors.textPrimary,
+        },
         headerShadowVisible: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
+        headerRight: () => (
+          <View style={{ marginRight: 12 }}>
+            <ThemeToggleButton size="compact" />
+          </View>
+        ),
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -148,62 +183,79 @@ function AuthNavigationGuard() {
   );
 }
 
-function RootLayout() {
+function ThemedAppShell() {
+  const { isDark, colors } = useTheme();
+
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor={COLORS.background} />
-      <AppErrorBoundary>
+    <>
+      <StatusBar
+        style={isDark ? "light" : "dark"}
+        backgroundColor={colors.background}
+      />
+      <AppErrorBoundary colors={colors}>
         <AuthProvider>
           <AuthNavigationGuard />
         </AuthProvider>
       </AppErrorBoundary>
+    </>
+  );
+}
+
+function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <ThemedAppShell />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 export default SENTRY_DSN ? Sentry.wrap(RootLayout) : RootLayout;
 
-const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  loadingText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  errorContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    gap: 12,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  errorBody: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-  },
-  retryBtn: {
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.indigo,
-  },
-  retryText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    loadingScreen: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+    },
+    loadingText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    errorContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+      gap: 12,
+    },
+    errorTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    errorBody: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    retryBtn: {
+      marginTop: 8,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.indigo,
+    },
+    retryText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: 13,
+    },
+  });
+}

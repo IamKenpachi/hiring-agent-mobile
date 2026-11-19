@@ -2,6 +2,7 @@
 
 from app.api.auth import router as auth_router
 from app.api.hunt import router as hunt_router
+from app.api.legal import router as legal_router
 from app.api.outputs import router as outputs_router
 from app.api.profiles import router as profiles_router
 from app.api.studio import router as studio_router
@@ -14,4 +15,5 @@ __all__ = [
     "studio_router",
     "outputs_router",
     "telemetry_router",
+    "legal_router",
 ]

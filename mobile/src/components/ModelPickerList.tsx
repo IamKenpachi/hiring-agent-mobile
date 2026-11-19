@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check, Cpu } from "lucide-react-native";
-import { COLORS } from "../constants/theme";
+import type { ThemeColors } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 import type { ModelOption } from "../types";
 
 interface ModelPickerListProps {
@@ -15,6 +16,9 @@ export function ModelPickerList({
   selectedModel,
   onSelect,
 }: ModelPickerListProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+
   return (
     <View style={styles.list}>
       {models.map((model) => {
@@ -32,7 +36,7 @@ export function ModelPickerList({
             <View style={styles.leftIcon}>
               <Cpu
                 size={16}
-                color={isSelected ? COLORS.indigo : COLORS.textSecondary}
+                color={isSelected ? colors.indigo : colors.textSecondary}
               />
             </View>
 
@@ -67,88 +71,90 @@ export function ModelPickerList({
   );
 }
 
-const styles = StyleSheet.create({
-  list: {
-    gap: 10,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 13,
-    borderRadius: 14,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardSelected: {
-    backgroundColor: COLORS.indigoSoft,
-    borderColor: COLORS.indigoBorder,
-  },
-  cardPressed: {
-    opacity: 0.85,
-  },
-  leftIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: {
-    flex: 1,
-    gap: 3,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  badge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#E9D5FF",
-  },
-  description: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    lineHeight: 16,
-  },
-  pricingRow: {
-    marginTop: 2,
-  },
-  pricingText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.emerald,
-  },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: COLORS.borderStrong,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioSelected: {
-    backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
-  },
-});
+function createStyles(colors: ThemeColors, _isDark: boolean) {
+  return StyleSheet.create({
+    list: {
+      gap: 10,
+    },
+    card: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 13,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cardSelected: {
+      backgroundColor: colors.indigoSoft,
+      borderColor: colors.indigoBorder,
+    },
+    cardPressed: {
+      opacity: 0.85,
+    },
+    leftIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: colors.surfaceElevated,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    content: {
+      flex: 1,
+      gap: 3,
+    },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    name: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    badge: {
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    badgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: colors.purpleText,
+    },
+    description: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      lineHeight: 16,
+    },
+    pricingRow: {
+      marginTop: 2,
+    },
+    pricingText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.emeraldText,
+    },
+    radio: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 1.5,
+      borderColor: colors.borderStrong,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    radioSelected: {
+      backgroundColor: colors.indigo,
+      borderColor: colors.indigo,
+    },
+  });
+}
 

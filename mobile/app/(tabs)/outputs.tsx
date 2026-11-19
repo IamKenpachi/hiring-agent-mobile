@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -22,8 +22,13 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import { COLORS, formatDisplayDate } from "../../src/constants/theme";
+import {
+  formatDisplayDate,
+  getCardElevation,
+  type ThemeColors,
+} from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError } from "../../src/lib/api";
 import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { ScoreBadge } from "../../src/components/ScoreBadge";
@@ -32,6 +37,8 @@ import type { TailoredOutputSummary } from "../../src/types";
 export default function OutputsScreen() {
   const router = useRouter();
   const { availableModels } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const [outputs, setOutputs] = useState<TailoredOutputSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -110,12 +117,12 @@ export default function OutputsScreen() {
     <View style={styles.container}>
       {/* Search Filter */}
       <View style={styles.searchWrap}>
-        <Search size={15} color={COLORS.textMuted} />
+        <Search size={15} color={colors.textMuted} />
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Filter tailored applications by role, company, or tone..."
-          placeholderTextColor={COLORS.textMuted}
+          placeholderTextColor={colors.textMuted}
           style={styles.searchInput}
         />
       </View>
@@ -128,7 +135,7 @@ export default function OutputsScreen() {
 
       {loading && outputs.length === 0 ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.indigo} />
+          <ActivityIndicator size="large" color={colors.indigo} />
           <Text style={styles.muted}>Loading saved tailored outputs...</Text>
         </View>
       ) : (
@@ -140,12 +147,12 @@ export default function OutputsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => void loadOutputs(true)}
-              tintColor={COLORS.indigo}
+              tintColor={colors.indigo}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyCard}>
-              <FileCheck2 size={28} color={COLORS.indigo} />
+              <FileCheck2 size={28} color={colors.indigo} />
               <Text style={styles.emptyTitle}>No Tailored Outputs Yet</Text>
               <Text style={styles.emptyBody}>
                 Tailor a job from JobSpy Hunter or paste any JD in Instant Tailor Studio
@@ -181,27 +188,27 @@ export default function OutputsScreen() {
                       pressed && styles.deleteIconBtnPressed,
                     ]}
                   >
-                    <Trash2 size={15} color={COLORS.textMuted} />
+                    <Trash2 size={15} color={colors.textMuted} />
                   </Pressable>
-                  <ChevronRight size={18} color={COLORS.textMuted} />
+                  <ChevronRight size={18} color={colors.textMuted} />
                 </View>
               </View>
 
               <View style={styles.metaRow}>
                 <View style={styles.metaBadge}>
-                  <Calendar size={11.5} color={COLORS.textSecondary} />
+                  <Calendar size={11.5} color={colors.textSecondary} />
                   <Text style={styles.metaText}>
                     {formatDisplayDate(item.created_at)}
                   </Text>
                 </View>
 
                 <View style={styles.metaBadge}>
-                  <Sliders size={11.5} color={COLORS.purple} />
+                  <Sliders size={11.5} color={colors.purpleText} />
                   <Text style={styles.metaText}>{item.tone || "Modern & Impactful"}</Text>
                 </View>
 
                 <View style={styles.metaBadge}>
-                  <Cpu size={11.5} color={COLORS.indigo} />
+                  <Cpu size={11.5} color={colors.indigoText} />
                   <Text style={styles.metaText}>{resolveModelDisplayName(item.model_used, availableModels)}</Text>
                 </View>
               </View>
@@ -232,7 +239,7 @@ export default function OutputsScreen() {
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
                 <View style={styles.modalIconWrap}>
-                  <AlertTriangle size={18} color={COLORS.rose} />
+                  <AlertTriangle size={18} color={colors.roseText} />
                 </View>
                 <Text style={styles.modalTitle}>Delete Saved Output?</Text>
               </View>
@@ -248,7 +255,7 @@ export default function OutputsScreen() {
                   deleting && { opacity: 0.45 },
                 ]}
               >
-                <X size={16} color={COLORS.textSecondary} />
+                <X size={16} color={colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -309,9 +316,9 @@ export default function OutputsScreen() {
                 ]}
               >
                 {deleting ? (
-                  <ActivityIndicator size="small" color="#FFE4E6" />
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Trash2 size={14} color="#FDA4AF" />
+                  <Trash2 size={14} color="#FFFFFF" />
                 )}
                 <Text style={styles.confirmDeleteText}>
                   {deleting ? "Deleting..." : "Delete"}
@@ -325,274 +332,281 @@ export default function OutputsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  searchWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: COLORS.textPrimary,
-  },
-  errorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 12.5,
-    color: "#FDA4AF",
-    fontWeight: "600",
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  muted: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  list: {
-    gap: 11,
-    paddingBottom: 32,
-  },
-  emptyCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 24,
-    alignItems: "center",
-    gap: 8,
-    marginTop: 20,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  emptyBody: {
-    fontSize: 12.5,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-    gap: 10,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  cardTopActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  deleteIconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  deleteIconBtnPressed: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-  },
-  jobTitle: {
-    fontSize: 15.5,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  company: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  metaText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  scoreRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(5, 8, 16, 0.78)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    padding: 18,
-    gap: 14,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  modalTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  modalIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalTitle: {
-    fontSize: 16.5,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    flexShrink: 1,
-  },
-  modalCloseBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalTargetBox: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  modalTargetTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  modalTargetCompany: {
-    fontSize: 12.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  modalBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.textSecondary,
-  },
-  modalBodyStrong: {
-    color: COLORS.textPrimary,
-    fontWeight: "700",
-  },
-  modalErrorBanner: {
-    backgroundColor: COLORS.roseSoft,
-    borderColor: COLORS.roseBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 2,
-  },
-  cancelBtn: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  confirmDeleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-  },
-  confirmDeleteText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#FDA4AF",
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  const cardElevation = getCardElevation(isDark);
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+    },
+    searchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+      ...cardElevation,
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: 10,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    errorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 10,
+    },
+    errorText: {
+      fontSize: 12.5,
+      color: colors.roseText,
+      fontWeight: "600",
+    },
+    center: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    muted: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    list: {
+      gap: 11,
+      paddingBottom: 32,
+    },
+    emptyCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 24,
+      alignItems: "center",
+      gap: 8,
+      marginTop: 20,
+      ...cardElevation,
+    },
+    emptyTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    emptyBody: {
+      fontSize: 12.5,
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 18,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      gap: 10,
+      ...cardElevation,
+    },
+    cardTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    cardTopActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    deleteIconBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: isDark ? "transparent" : colors.border,
+    },
+    deleteIconBtnPressed: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+    },
+    jobTitle: {
+      fontSize: 15.5,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    company: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    metaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    metaBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    metaText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    scoreRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: colors.modalBackdrop,
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 20,
+    },
+    modalCard: {
+      width: "100%",
+      maxWidth: 420,
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      padding: 18,
+      gap: 14,
+      ...cardElevation,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    modalTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flex: 1,
+    },
+    modalIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalTitle: {
+      fontSize: 16.5,
+      fontWeight: "800",
+      color: colors.textPrimary,
+      flexShrink: 1,
+    },
+    modalCloseBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalTargetBox: {
+      backgroundColor: colors.inputBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 2,
+    },
+    modalTargetTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    modalTargetCompany: {
+      fontSize: 12.5,
+      fontWeight: "600",
+      color: colors.textSecondary,
+    },
+    modalBody: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.textSecondary,
+    },
+    modalBodyStrong: {
+      color: colors.textPrimary,
+      fontWeight: "700",
+    },
+    modalErrorBanner: {
+      backgroundColor: colors.roseSoft,
+      borderColor: colors.roseBorder,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+    },
+    modalActions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 10,
+      marginTop: 2,
+    },
+    cancelBtn: {
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cancelBtnText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
+    confirmDeleteBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.rose,
+      borderWidth: 1,
+      borderColor: colors.rose,
+    },
+    confirmDeleteText: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+  });
+}
 

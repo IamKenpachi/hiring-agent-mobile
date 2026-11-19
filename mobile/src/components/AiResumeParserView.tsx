@@ -10,8 +10,11 @@ import {
   View,
 } from "react-native";
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, FileText, Plus, X } from "lucide-react-native";
-import { AuthButtonGradient, WEB_SANS } from "./OnboardingGraphics";
+import { getCardElevation } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 import type { WorkPreference, WizardDraftState } from "../lib/profileHelpers";
+import { AuthButtonGradient, WEB_SANS } from "./OnboardingGraphics";
+import { ThemeToggleButton } from "./ThemeToggleButton";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -40,6 +43,7 @@ export function AiResumeParserView({
   saving = false,
   error = null,
 }: AiResumeParserViewProps) {
+  const { colors, isDark } = useTheme();
   const [expanded, setExpanded] = useState<SectionKey | null>(null);
   const [skillInput, setSkillInput] = useState("");
 
@@ -80,18 +84,38 @@ export function AiResumeParserView({
     onChange({ ...draft, skills: draft.skills.filter((_, i) => i !== idx) });
   };
 
+  const inputStyle = {
+    backgroundColor: colors.inputBg,
+    borderColor: isDark ? colors.border : colors.borderStrong,
+    color: colors.textPrimary,
+  };
+
+  const cardStyle = [
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+    },
+    getCardElevation(isDark),
+  ];
+
   return (
     <View className="flex-1">
       {/* Clean top bar without extra step progress bar, matching Mockup Screen 4 */}
-      <View className="px-5 pt-3 pb-1 flex-row items-center">
+      <View className="px-5 pt-3 pb-1 flex-row items-center justify-between">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
           onPress={onBack}
-          className="h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] active:bg-white/10"
+          style={{
+            backgroundColor: colors.headerBtnBg,
+            borderColor: colors.headerBtnBorder,
+          }}
+          className="h-8 w-8 items-center justify-center rounded-full border active:opacity-75"
         >
-          <ArrowLeft size={16} color="#CBD5E1" />
+          <ArrowLeft size={16} color={colors.textPrimary} />
         </Pressable>
+
+        <ThemeToggleButton size="compact" />
       </View>
 
       <ScrollView
@@ -100,25 +124,49 @@ export function AiResumeParserView({
         keyboardShouldPersistTaps="handled"
       >
         <Text
-          style={WEB_SANS}
-          className="text-center text-[22px] font-bold tracking-[-0.4px] text-white mb-6"
+          style={[WEB_SANS, { color: colors.textPrimary }]}
+          className="text-center text-[22px] font-bold tracking-[-0.4px] mb-6"
         >
           Resume Parser
         </Text>
 
         {/* Extracted file banner */}
-        <View className="rounded-2xl border border-white/10 bg-[#0F1524] p-3.5 mb-3.5 flex-row items-center gap-3">
-          <View className="h-11 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
-            <FileText size={18} color="#94A3B8" />
+        <View
+          style={cardStyle}
+          className="rounded-2xl border p-3.5 mb-3.5 flex-row items-center gap-3"
+        >
+          <View
+            style={{
+              backgroundColor: colors.surfaceElevated,
+              borderColor: colors.border,
+            }}
+            className="h-11 w-9 items-center justify-center rounded-lg border"
+          >
+            <FileText size={18} color={colors.textSecondary} />
           </View>
           <View className="flex-1">
-            <Text style={WEB_SANS} numberOfLines={1} className="text-[13px] font-semibold text-white">
+            <Text
+              style={[WEB_SANS, { color: colors.textPrimary }]}
+              numberOfLines={1}
+              className="text-[13px] font-semibold"
+            >
               {filename}{" "}
-              <Text className="font-normal text-[#94A3B8]">({sizeKb} KB)</Text>
+              <Text style={{ color: colors.textSecondary }} className="font-normal">
+                ({sizeKb} KB)
+              </Text>
             </Text>
-            <View className="mt-1.5 self-start flex-row items-center gap-1 rounded-full border border-[#10B981]/35 bg-[#10B981]/15 px-2.5 py-0.5">
-              <CheckCircle2 size={11} color="#34D399" />
-              <Text style={WEB_SANS} className="text-[11px] font-semibold text-[#34D399]">
+            <View
+              style={{
+                backgroundColor: colors.emeraldSoft,
+                borderColor: colors.emeraldBorder,
+              }}
+              className="mt-1.5 self-start flex-row items-center gap-1 rounded-full border px-2.5 py-0.5"
+            >
+              <CheckCircle2 size={11} color={colors.emeraldText} />
+              <Text
+                style={[WEB_SANS, { color: colors.emeraldText }]}
+                className="text-[11px] font-semibold"
+              >
                 Resume Details Extracted
               </Text>
             </View>
@@ -126,140 +174,181 @@ export function AiResumeParserView({
         </View>
 
         {error ? (
-          <View className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5">
-            <Text className="text-xs font-medium text-red-200">{error}</Text>
+          <View
+            style={{
+              backgroundColor: colors.roseSoft,
+              borderColor: colors.roseBorder,
+            }}
+            className="mb-3 rounded-xl border px-3.5 py-2.5"
+          >
+            <Text style={{ color: colors.roseText }} className="text-xs font-medium">
+              {error}
+            </Text>
           </View>
         ) : null}
 
         {/* 1. Contact & Links */}
-        <View className="rounded-xl border border-white/10 bg-[#0D121F] mb-2.5 overflow-hidden">
+        <View style={cardStyle} className="rounded-xl border mb-2.5 overflow-hidden">
           <Pressable
             onPress={() => toggleSection("contact")}
-            className="p-3.5 flex-row items-center justify-between active:bg-white/[0.03]"
+            className="p-3.5 flex-row items-center justify-between active:opacity-80"
           >
             <View className="flex-1 pr-2">
               <View className="flex-row items-center gap-2">
-                <CheckCircle2 size={15} color="#10B981" />
-                <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                <CheckCircle2 size={15} color={colors.emerald} />
+                <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                   Contact & Links
                 </Text>
               </View>
-              <Text style={WEB_SANS} numberOfLines={1} className="mt-1 text-[12px] text-[#94A3B8]">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                className="mt-1 text-[12px]"
+              >
                 {roleHeadline} • {locationLine}
               </Text>
             </View>
             {expanded === "contact" ? (
-              <ChevronUp size={16} color="#64748B" />
+              <ChevronUp size={16} color={colors.textMuted} />
             ) : (
-              <ChevronDown size={16} color="#64748B" />
+              <ChevronDown size={16} color={colors.textMuted} />
             )}
           </Pressable>
 
           {expanded === "contact" ? (
-            <View className="border-t border-white/[0.06] px-3.5 pb-3.5 pt-3 gap-2.5">
+            <View
+              style={{ borderTopColor: colors.border }}
+              className="border-t px-3.5 pb-3.5 pt-3 gap-2.5"
+            >
               <TextInput
                 value={draft.profileName}
                 onChangeText={(v) => onChange({ ...draft, profileName: v })}
                 placeholder="Target Role / Profile Name"
-                placeholderTextColor="#64748B"
-                className="rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                placeholderTextColor={colors.textMuted}
+                style={inputStyle}
+                className="rounded-lg border px-3 py-2 text-xs"
               />
               <TextInput
                 value={draft.fullName}
                 onChangeText={(v) => onChange({ ...draft, fullName: v })}
                 placeholder="Full Name"
-                placeholderTextColor="#64748B"
-                className="rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                placeholderTextColor={colors.textMuted}
+                style={inputStyle}
+                className="rounded-lg border px-3 py-2 text-xs"
               />
               <View className="flex-row gap-2">
                 <TextInput
                   value={draft.email}
                   onChangeText={(v) => onChange({ ...draft, email: v })}
                   placeholder="Email"
-                  placeholderTextColor="#64748B"
-                  className="flex-1 rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                  placeholderTextColor={colors.textMuted}
+                  style={inputStyle}
+                  className="flex-1 rounded-lg border px-3 py-2 text-xs"
                 />
                 <TextInput
                   value={draft.phone}
                   onChangeText={(v) => onChange({ ...draft, phone: v })}
                   placeholder="Phone"
-                  placeholderTextColor="#64748B"
-                  className="flex-1 rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                  placeholderTextColor={colors.textMuted}
+                  style={inputStyle}
+                  className="flex-1 rounded-lg border px-3 py-2 text-xs"
                 />
               </View>
               <TextInput
                 value={draft.location}
                 onChangeText={(v) => onChange({ ...draft, location: v })}
                 placeholder="Location"
-                placeholderTextColor="#64748B"
-                className="rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                placeholderTextColor={colors.textMuted}
+                style={inputStyle}
+                className="rounded-lg border px-3 py-2 text-xs"
               />
               <View className="flex-row gap-2">
-                {(["Remote", "Hybrid", "On-Site"] as WorkPreference[]).map((pref) => (
-                  <Pressable
-                    key={pref}
-                    onPress={() => onChange({ ...draft, workPreference: pref })}
-                    className={`flex-1 items-center rounded-full border py-1.5 ${
-                      draft.workPreference === pref
-                        ? "border-[#6366F1] bg-[#6366F1]/25"
-                        : "border-white/10 bg-[#080C16]"
-                    }`}
-                  >
-                    <Text className="text-[11px] font-semibold text-white">{pref}</Text>
-                  </Pressable>
-                ))}
+                {(["Remote", "Hybrid", "On-Site"] as WorkPreference[]).map((pref) => {
+                  const active = draft.workPreference === pref;
+                  return (
+                    <Pressable
+                      key={pref}
+                      onPress={() => onChange({ ...draft, workPreference: pref })}
+                      style={{
+                        backgroundColor: active ? colors.indigoSoft : colors.inputBg,
+                        borderColor: active ? colors.indigo : colors.border,
+                      }}
+                      className="flex-1 items-center rounded-full border py-1.5"
+                    >
+                      <Text
+                        style={{ color: active ? colors.indigoText : colors.textSecondary }}
+                        className="text-[11px] font-semibold"
+                      >
+                        {pref}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
               <TextInput
                 value={draft.linkedinUrl}
                 onChangeText={(v) => onChange({ ...draft, linkedinUrl: v })}
                 placeholder="LinkedIn URL"
-                placeholderTextColor="#64748B"
-                className="rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                placeholderTextColor={colors.textMuted}
+                style={inputStyle}
+                className="rounded-lg border px-3 py-2 text-xs"
               />
             </View>
           ) : null}
         </View>
 
         {/* 2. Core Skills */}
-        <View className="rounded-xl border border-white/10 bg-[#0D121F] mb-2.5 overflow-hidden">
+        <View style={cardStyle} className="rounded-xl border mb-2.5 overflow-hidden">
           <Pressable
             onPress={() => toggleSection("skills")}
-            className="p-3.5 flex-row items-center justify-between active:bg-white/[0.03]"
+            className="p-3.5 flex-row items-center justify-between active:opacity-80"
           >
             <View className="flex-1 pr-2">
               <View className="flex-row items-center gap-2">
-                <CheckCircle2 size={15} color="#10B981" />
-                <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                <CheckCircle2 size={15} color={colors.emerald} />
+                <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                   Core Skills ({draft.skills.length})
                 </Text>
               </View>
-              <Text style={WEB_SANS} numberOfLines={1} className="mt-1 text-[12px] text-[#94A3B8]">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                className="mt-1 text-[12px]"
+              >
                 {skillsPreview}
               </Text>
             </View>
             {expanded === "skills" ? (
-              <ChevronUp size={16} color="#64748B" />
+              <ChevronUp size={16} color={colors.textMuted} />
             ) : (
-              <ChevronDown size={16} color="#64748B" />
+              <ChevronDown size={16} color={colors.textMuted} />
             )}
           </Pressable>
 
           {expanded === "skills" ? (
-            <View className="border-t border-white/[0.06] px-3.5 pb-3.5 pt-3 gap-2.5">
+            <View
+              style={{ borderTopColor: colors.border }}
+              className="border-t px-3.5 pb-3.5 pt-3 gap-2.5"
+            >
               <View className="flex-row gap-2">
                 <TextInput
                   value={skillInput}
                   onChangeText={setSkillInput}
                   onSubmitEditing={addSkill}
                   placeholder="Add Skill"
-                  placeholderTextColor="#64748B"
-                  className="flex-1 rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                  placeholderTextColor={colors.textMuted}
+                  style={inputStyle}
+                  className="flex-1 rounded-lg border px-3 py-2 text-xs"
                 />
                 <Pressable
                   onPress={addSkill}
-                  className="items-center justify-center rounded-lg border border-[#6366F1]/50 bg-[#6366F1]/25 px-3"
+                  style={{
+                    backgroundColor: colors.indigoSoft,
+                    borderColor: colors.indigoBorder,
+                  }}
+                  className="items-center justify-center rounded-lg border px-3"
                 >
-                  <Plus size={15} color="#C7D2FE" />
+                  <Plus size={15} color={colors.indigoText} />
                 </Pressable>
               </View>
               <View className="flex-row flex-wrap gap-1.5">
@@ -267,10 +356,16 @@ export function AiResumeParserView({
                   <Pressable
                     key={`${skill}-${idx}`}
                     onPress={() => removeSkill(idx)}
-                    className="flex-row items-center gap-1 rounded-full border border-[#14B8A6]/45 bg-[#0D9488]/20 px-2.5 py-1"
+                    style={{
+                      backgroundColor: colors.emeraldSoft,
+                      borderColor: colors.emeraldBorder,
+                    }}
+                    className="flex-row items-center gap-1 rounded-full border px-2.5 py-1"
                   >
-                    <Text className="text-[11px] font-semibold text-[#5EEAD4]">{skill}</Text>
-                    <X size={11} color="#5EEAD4" />
+                    <Text style={{ color: colors.emeraldText }} className="text-[11px] font-semibold">
+                      {skill}
+                    </Text>
+                    <X size={11} color={colors.emeraldText} />
                   </Pressable>
                 ))}
               </View>
@@ -278,9 +373,10 @@ export function AiResumeParserView({
                 value={draft.summary}
                 onChangeText={(v) => onChange({ ...draft, summary: v })}
                 placeholder="Executive summary..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.textMuted}
                 multiline
-                className="min-h-[76px] rounded-lg border border-white/10 bg-[#080C16] px-3 py-2 text-xs text-white"
+                style={inputStyle}
+                className="min-h-[76px] rounded-lg border px-3 py-2 text-xs"
                 textAlignVertical="top"
               />
             </View>
@@ -288,34 +384,48 @@ export function AiResumeParserView({
         </View>
 
         {/* 3. Work Experience */}
-        <View className="rounded-xl border border-white/10 bg-[#0D121F] mb-2.5 overflow-hidden">
+        <View style={cardStyle} className="rounded-xl border mb-2.5 overflow-hidden">
           <Pressable
             accessibilityRole="button"
             onPress={() => toggleSection("experience")}
-            className="p-3.5 flex-row items-center justify-between active:bg-white/[0.03]"
+            className="p-3.5 flex-row items-center justify-between active:opacity-80"
           >
             <View className="flex-1 pr-2">
               <View className="flex-row items-center gap-2">
-                <CheckCircle2 size={15} color="#10B981" />
-                <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                <CheckCircle2 size={15} color={colors.emerald} />
+                <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                   Work Experience
                 </Text>
               </View>
-              <Text style={WEB_SANS} numberOfLines={1} className="mt-1 text-[12px] text-[#94A3B8]">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                className="mt-1 text-[12px]"
+              >
                 {expCount} {expCount === 1 ? "Role" : "Roles"} extracted
               </Text>
             </View>
             {expanded === "experience" ? (
-              <ChevronUp size={16} color="#64748B" />
+              <ChevronUp size={16} color={colors.textMuted} />
             ) : (
-              <ChevronDown size={16} color="#64748B" />
+              <ChevronDown size={16} color={colors.textMuted} />
             )}
           </Pressable>
 
           {expanded === "experience" ? (
-            <View className="border-t border-white/[0.06] px-3.5 pb-3.5 pt-3 gap-3">
+            <View
+              style={{ borderTopColor: colors.border }}
+              className="border-t px-3.5 pb-3.5 pt-3 gap-3"
+            >
               {draft.experiences.map((exp, idx) => (
-                <View key={idx} className="rounded-lg border border-white/10 bg-[#080C16] p-2.5 gap-2">
+                <View
+                  key={idx}
+                  style={{
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.border,
+                  }}
+                  className="rounded-lg border p-2.5 gap-2"
+                >
                   <TextInput
                     value={exp.title}
                     onChangeText={(v) => {
@@ -324,8 +434,9 @@ export function AiResumeParserView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="Role Title"
-                    placeholderTextColor="#64748B"
-                    className="text-xs font-semibold text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={{ color: colors.textPrimary }}
+                    className="text-xs font-semibold"
                   />
                   <TextInput
                     value={exp.company}
@@ -335,8 +446,9 @@ export function AiResumeParserView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="Company & Dates"
-                    placeholderTextColor="#64748B"
-                    className="text-xs text-[#CBD5E1]"
+                    placeholderTextColor={colors.textMuted}
+                    style={{ color: colors.textSecondary }}
+                    className="text-xs"
                   />
                   <TextInput
                     value={exp.bulletsText}
@@ -346,9 +458,10 @@ export function AiResumeParserView({
                       onChange({ ...draft, experiences: next });
                     }}
                     placeholder="Impact bullets (one per line)"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textMuted}
                     multiline
-                    className="min-h-[60px] text-xs text-[#94A3B8]"
+                    style={{ color: colors.textSecondary }}
+                    className="min-h-[60px] text-xs"
                     textAlignVertical="top"
                   />
                 </View>
@@ -358,33 +471,47 @@ export function AiResumeParserView({
         </View>
 
         {/* 4. Projects & Education */}
-        <View className="rounded-xl border border-white/10 bg-[#0D121F] mb-3 overflow-hidden">
+        <View style={cardStyle} className="rounded-xl border mb-3 overflow-hidden">
           <Pressable
             onPress={() => toggleSection("projectsEdu")}
-            className="p-3.5 flex-row items-center justify-between active:bg-white/[0.03]"
+            className="p-3.5 flex-row items-center justify-between active:opacity-80"
           >
             <View className="flex-1 pr-2">
               <View className="flex-row items-center gap-2">
-                <CheckCircle2 size={15} color="#10B981" />
-                <Text style={WEB_SANS} className="text-[14px] font-semibold text-white">
+                <CheckCircle2 size={15} color={colors.emerald} />
+                <Text style={[WEB_SANS, { color: colors.textPrimary }]} className="text-[14px] font-semibold">
                   Projects & Education
                 </Text>
               </View>
-              <Text style={WEB_SANS} numberOfLines={1} className="mt-1 text-[12px] text-[#94A3B8]">
+              <Text
+                style={[WEB_SANS, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                className="mt-1 text-[12px]"
+              >
                 {projEduSubtitle}
               </Text>
             </View>
             {expanded === "projectsEdu" ? (
-              <ChevronUp size={16} color="#64748B" />
+              <ChevronUp size={16} color={colors.textMuted} />
             ) : (
-              <ChevronDown size={16} color="#64748B" />
+              <ChevronDown size={16} color={colors.textMuted} />
             )}
           </Pressable>
 
           {expanded === "projectsEdu" ? (
-            <View className="border-t border-white/[0.06] px-3.5 pb-3.5 pt-3 gap-3">
+            <View
+              style={{ borderTopColor: colors.border }}
+              className="border-t px-3.5 pb-3.5 pt-3 gap-3"
+            >
               {draft.projects.map((proj, idx) => (
-                <View key={idx} className="rounded-lg border border-white/10 bg-[#080C16] p-2.5 gap-1.5">
+                <View
+                  key={idx}
+                  style={{
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.border,
+                  }}
+                  className="rounded-lg border p-2.5 gap-1.5"
+                >
                   <TextInput
                     value={proj.name}
                     onChangeText={(v) => {
@@ -393,8 +520,9 @@ export function AiResumeParserView({
                       onChange({ ...draft, projects: next });
                     }}
                     placeholder="Project Title"
-                    placeholderTextColor="#64748B"
-                    className="text-xs font-semibold text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={{ color: colors.textPrimary }}
+                    className="text-xs font-semibold"
                   />
                   <TextInput
                     value={proj.description}
@@ -404,14 +532,22 @@ export function AiResumeParserView({
                       onChange({ ...draft, projects: next });
                     }}
                     placeholder="Project impact..."
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textMuted}
                     multiline
-                    className="text-xs text-[#94A3B8]"
+                    style={{ color: colors.textSecondary }}
+                    className="text-xs"
                   />
                 </View>
               ))}
               {draft.educationList.map((ed, idx) => (
-                <View key={idx} className="rounded-lg border border-white/10 bg-[#080C16] p-2.5 gap-1.5">
+                <View
+                  key={idx}
+                  style={{
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.border,
+                  }}
+                  className="rounded-lg border p-2.5 gap-1.5"
+                >
                   <TextInput
                     value={ed.degree}
                     onChangeText={(v) => {
@@ -420,8 +556,9 @@ export function AiResumeParserView({
                       onChange({ ...draft, educationList: next });
                     }}
                     placeholder="Degree"
-                    placeholderTextColor="#64748B"
-                    className="text-xs font-semibold text-white"
+                    placeholderTextColor={colors.textMuted}
+                    style={{ color: colors.textPrimary }}
+                    className="text-xs font-semibold"
                   />
                   <TextInput
                     value={ed.institutionAndYear}
@@ -431,8 +568,9 @@ export function AiResumeParserView({
                       onChange({ ...draft, educationList: next });
                     }}
                     placeholder="University & Graduation Year"
-                    placeholderTextColor="#64748B"
-                    className="text-xs text-[#94A3B8]"
+                    placeholderTextColor={colors.textMuted}
+                    style={{ color: colors.textSecondary }}
+                    className="text-xs"
                   />
                 </View>
               ))}
@@ -451,7 +589,7 @@ export function AiResumeParserView({
           className="h-[50px] w-full items-center justify-center overflow-hidden rounded-full active:opacity-90"
         >
           <AuthButtonGradient />
-          <Text style={WEB_SANS} className="text-[15.5px] font-semibold text-white">
+          <Text style={[WEB_SANS, { color: "#FFFFFF" }]} className="text-[15.5px] font-semibold">
             {saving ? "Saving Master Profile..." : "Save Master Profile"}
           </Text>
         </Pressable>

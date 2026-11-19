@@ -27,6 +27,9 @@ def _build_engine(db_url: str) -> Engine:
             raw_path = normalized_url.split(":///", 1)[1]
             if raw_path and raw_path != ":memory:":
                 Path(raw_path).parent.mkdir(parents=True, exist_ok=True)
+    elif normalized_url.startswith("postgresql"):
+        # Disable psycopg3 automatic prepared statements for Supabase Supavisor / PgBouncer transaction pooler (port 6543).
+        connect_args["prepare_threshold"] = None
 
     eng = create_engine(
         normalized_url,

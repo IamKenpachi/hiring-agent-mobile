@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Platform } from "react-native";
@@ -29,6 +30,7 @@ interface AuthContextValue {
   user: User | null;
   token: string | null;
   geminiApiKey: string;
+  trialMode: boolean;
   selectedModel: string;
   availableModels: ModelOption[];
   profiles: Profile[];
@@ -45,7 +47,9 @@ interface AuthContextValue {
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   setGeminiKey: (key: string) => Promise<void>;
+  setTrialMode: (enabled: boolean) => Promise<void>;
   setSelectedModel: (model: string) => Promise<void>;
   refreshProfiles: () => Promise<Profile[]>;
   activateProfile: (profileId: string) => Promise<void>;
@@ -61,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [geminiApiKey, setGeminiApiKeyState] = useState<string>("");
+  const [trialMode, setTrialModeState] = useState<boolean>(false);
   const [selectedModel, setSelectedModelState] = useState<string>(DEFAULT_GEMINI_MODEL);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>(
     DEFAULT_AVAILABLE_MODELS
@@ -68,6 +73,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tokenTelemetry, setTokenTelemetry] = useState<TokenTelemetry | null>(null);
   const [onboardingDraft, setOnboardingDraft] = useState<ProfileCreatePayload | null>(null);
+  const oauthInFlightRef = useRef(false);
+
+  const clearLocalSessionState = useCallback((clearAccountSecrets = false) => {
+    syncApiCredentials(
+      clearAccountSecrets ? { token: null, geminiKey: null } : { token: null }
+    );
+    setToken(null);
+    setUser(null);
+    setProfiles([]);
+    setTokenTelemetry(null);
+    setOnboardingDraft(null);
+    if (clearAccountSecrets) {
+      setGeminiApiKeyState("");
+      setTrialModeState(false);
+    }
+  }, []);
 
   const pingHealth = useCallback(async (): Promise<boolean> => {
     try {
@@ -108,10 +129,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     const hydrate = async () => {
       try {
-        let [storedToken, storedKey, storedModel] = await Promise.all([
+        let [storedToken, storedKey, storedModel, storedTrialMode] = await Promise.all([
           secureStorage.getAuthToken(),
           secureStorage.getGeminiApiKey(),
           secureStorage.getSelectedModel(),
+          secureStorage.getTrialMode(),
         ]);
 
         // Recover Supabase Google OAuth session on web redirect return (PKCE ?code= or hash tokens)
@@ -154,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setToken(storedToken);
         setGeminiApiKeyState(cleanKey);
+        setTrialModeState(Boolean(storedTrialMode));
         setSelectedModelState(cleanModel);
         if (pendingDraft) {
           setOnboardingDraft(pendingDraft);
@@ -202,6 +225,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
     };
   }, [pingHealth, refreshProfiles, refreshTelemetry]);
+
+  // Keep JWT synchronized across 1-hour Supabase token rotations and remote sign-outs
+  useEffect(() => {
+    if (!isGoogleAuthConfigured) return;
+
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const supabase = getSupabaseAuthClient();
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        if (
+          (event === "TOKEN_REFRESHED" ||
+            (event === "SIGNED_IN" && !oauthInFlightRef.current)) &&
+          session?.access_token
+        ) {
+          void secureStorage.setAuthToken(session.access_token);
+          syncApiCredentials({ token: session.access_token });
+          setToken(session.access_token);
+          return;
+        }
+        if (event === "SIGNED_OUT") {
+          void secureStorage.clearAuthSession();
+          clearLocalSessionState(false);
+        }
+      });
+      subscription = data?.subscription ?? null;
+    } catch {
+      // Ignore auth listener initialization issues when Supabase config is absent
+    }
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [clearLocalSessionState]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -342,34 +398,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const code = parsed.searchParams.get("code");
-    let session = null;
-    if (code) {
-      const exchanged = await supabase.auth.exchangeCodeForSession(code);
-      if (exchanged.error) throw exchanged.error;
-      session = exchanged.data.session;
-    } else {
-      const accessToken = hashParams.get("access_token");
-      const refreshToken = hashParams.get("refresh_token");
-      if (accessToken && refreshToken) {
-        const res = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (res.error) throw res.error;
-        session = res.data.session;
+    oauthInFlightRef.current = true;
+    try {
+      let session = null;
+      if (code) {
+        const exchanged = await supabase.auth.exchangeCodeForSession(code);
+        if (exchanged.error) throw exchanged.error;
+        session = exchanged.data.session;
+      } else {
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const res = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (res.error) throw res.error;
+          session = res.data.session;
+        }
       }
-    }
 
-    if (!session?.access_token) {
-      throw new Error("Google sign-in completed without a valid session token.");
-    }
+      if (!session?.access_token) {
+        throw new Error("Google sign-in completed without a valid session token.");
+      }
 
-    const meta = (session.user?.user_metadata || {}) as Record<string, unknown>;
-    await applyAuthenticatedToken(
-      session.access_token,
-      session.user?.email || "",
-      String(meta.full_name || meta.name || "")
-    );
+      const meta = (session.user?.user_metadata || {}) as Record<string, unknown>;
+      await applyAuthenticatedToken(
+        session.access_token,
+        session.user?.email || "",
+        String(meta.full_name || meta.name || "")
+      );
+    } finally {
+      oauthInFlightRef.current = false;
+    }
   }, [applyAuthenticatedToken, onboardingDraft]);
 
   const signOut = useCallback(async () => {
@@ -381,19 +442,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     await secureStorage.clearAuthSession();
-    syncApiCredentials({ token: null });
-    setToken(null);
-    setUser(null);
-    setProfiles([]);
-    setTokenTelemetry(null);
-    setOnboardingDraft(null);
-  }, []);
+    clearLocalSessionState(false);
+  }, [clearLocalSessionState]);
+
+  const deleteAccount = useCallback(async () => {
+    await apiClient.deleteAccount();
+    if (isGoogleAuthConfigured) {
+      try {
+        await getSupabaseAuthClient().auth.signOut();
+      } catch {
+        // Ignore remote signOut failure after server-side account deletion
+      }
+    }
+    await secureStorage.clearAllAccountData();
+    clearLocalSessionState(true);
+  }, [clearLocalSessionState]);
 
   const setGeminiKey = useCallback(async (key: string) => {
     const clean = key.trim();
     await secureStorage.setGeminiApiKey(clean);
     syncApiCredentials({ geminiKey: clean });
     setGeminiApiKeyState(clean);
+  }, []);
+
+  const setTrialMode = useCallback(async (enabled: boolean) => {
+    setTrialModeState(enabled);
+    try {
+      await secureStorage.setTrialMode(enabled);
+    } catch {
+      // Keep optimistic in-memory trial mode if device storage write fails
+    }
   }, []);
 
   const setSelectedModel = useCallback(async (model: string) => {
@@ -427,6 +505,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       token,
       geminiApiKey,
+      trialMode,
       selectedModel,
       availableModels,
       profiles,
@@ -439,7 +518,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUpWithOnboarding,
       signInWithGoogle,
       signOut,
+      deleteAccount,
       setGeminiKey,
+      setTrialMode,
       setSelectedModel,
       refreshProfiles,
       activateProfile,
@@ -452,6 +533,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       token,
       geminiApiKey,
+      trialMode,
       selectedModel,
       availableModels,
       profiles,
@@ -463,7 +545,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUpWithOnboarding,
       signInWithGoogle,
       signOut,
+      deleteAccount,
       setGeminiKey,
+      setTrialMode,
       setSelectedModel,
       refreshProfiles,
       activateProfile,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,8 +31,13 @@ import {
   XCircle,
   Zap,
 } from "lucide-react-native";
-import { COLORS, formatDisplayDate } from "../../src/constants/theme";
+import {
+  formatDisplayDate,
+  getCardElevation,
+  type ThemeColors,
+} from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError, buildAuthHeaders } from "../../src/lib/api";
 import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
 import { HtmlDocumentViewer } from "../../src/components/HtmlDocumentViewer";
@@ -56,6 +61,8 @@ export default function OutputDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width: windowWidth } = useWindowDimensions();
   const { selectedModel, availableModels, refreshTelemetry } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [output, setOutput] = useState<TailoredOutput | null>(null);
   const [loading, setLoading] = useState(true);
@@ -218,7 +225,7 @@ export default function OutputDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.indigo} />
+        <ActivityIndicator size="large" color={colors.indigo} />
         <Text style={styles.centerText}>Loading Tailored Output Studio...</Text>
       </View>
     );
@@ -245,7 +252,9 @@ export default function OutputDetailScreen() {
           <View style={styles.scoreMiniRow}>
             <ScoreBadge label="Fit" score={output.overall_fit_score} compact />
             <ScoreBadge label="ATS" score={output.ats_keyword_score} compact />
-            <Text style={styles.modelLabel}>{resolveModelDisplayName(output.model_used, availableModels)}</Text>
+            <Text style={styles.modelLabel}>
+              {resolveModelDisplayName(output.model_used, availableModels)}
+            </Text>
           </View>
         </View>
       </View>
@@ -263,7 +272,7 @@ export default function OutputDetailScreen() {
             >
               <Icon
                 size={13}
-                color={active ? "#FFFFFF" : COLORS.textSecondary}
+                color={active ? "#FFFFFF" : colors.textSecondary}
               />
               <Text style={[styles.pillTabText, active && styles.pillTabTextActive]}>
                 {slide.label}
@@ -275,7 +284,7 @@ export default function OutputDetailScreen() {
 
       {toastMsg ? (
         <View style={styles.toastBar}>
-          <CheckCircle2 size={14} color={COLORS.emerald} />
+          <CheckCircle2 size={14} color={colors.emeraldText} />
           <Text style={styles.toastText}>{toastMsg}</Text>
         </View>
       ) : null}
@@ -337,7 +346,7 @@ export default function OutputDetailScreen() {
             {/* Aggressive Keyword Injection Inspector */}
             <View style={[styles.card, styles.injectedCard]}>
               <View style={styles.cardTitleRow}>
-                <Zap size={16} color={COLORS.purple} />
+                <Zap size={16} color={colors.purpleText} />
                 <Text style={styles.cardTitle}>
                   Aggressively Injected Keywords ({output.injected_keywords?.length || 0})
                 </Text>
@@ -365,7 +374,7 @@ export default function OutputDetailScreen() {
             {/* Matched & Missing Skills */}
             <View style={styles.card}>
               <View style={styles.cardTitleRow}>
-                <CheckCircle2 size={15} color={COLORS.emerald} />
+                <CheckCircle2 size={15} color={colors.emerald} />
                 <Text style={styles.cardTitle}>
                   Matched Skills ({output.matched_skills?.length || 0})
                 </Text>
@@ -379,7 +388,7 @@ export default function OutputDetailScreen() {
               </View>
 
               <View style={[styles.cardTitleRow, { marginTop: 6 }]}>
-                <XCircle size={15} color={COLORS.rose} />
+                <XCircle size={15} color={colors.rose} />
                 <Text style={styles.cardTitle}>
                   Remaining Missing Skills ({output.missing_skills?.length || 0})
                 </Text>
@@ -404,7 +413,7 @@ export default function OutputDetailScreen() {
                   <Text style={styles.bodyText}>{output.match_reason}</Text>
                 ) : null}
                 {output.recommendation ? (
-                  <Text style={[styles.bodyText, { color: "#E9D5FF" }]}>
+                  <Text style={[styles.bodyText, { color: colors.purpleText }]}>
                     {output.recommendation}
                   </Text>
                 ) : null}
@@ -423,9 +432,9 @@ export default function OutputDetailScreen() {
             style={styles.pdfBtn}
           >
             {downloadingType === "cv" ? (
-              <ActivityIndicator size="small" color={COLORS.textPrimary} />
+              <ActivityIndicator size="small" color={colors.textPrimary} />
             ) : (
-              <Download size={14} color={COLORS.indigo} />
+              <Download size={14} color={colors.indigoText} />
             )}
             <Text style={styles.pdfBtnText}>CV PDF</Text>
           </Pressable>
@@ -436,9 +445,9 @@ export default function OutputDetailScreen() {
             style={styles.pdfBtn}
           >
             {downloadingType === "cover_letter" ? (
-              <ActivityIndicator size="small" color={COLORS.textPrimary} />
+              <ActivityIndicator size="small" color={colors.textPrimary} />
             ) : (
-              <Download size={14} color={COLORS.purple} />
+              <Download size={14} color={colors.purpleText} />
             )}
             <Text style={styles.pdfBtnText}>Cover Letter PDF</Text>
           </Pressable>
@@ -471,12 +480,13 @@ export default function OutputDetailScreen() {
           <View style={styles.drawerHeader}>
             <View style={styles.drawerTitleWrap}>
               <View style={styles.botAvatar}>
-                <Bot size={16} color="#E9D5FF" />
+                <Bot size={16} color={colors.purpleText} />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.drawerTitle}>Revision Studio</Text>
-                <Text style={styles.drawerSub}>
-                  {output.job_title} @ {output.company} • {resolveModelDisplayName(selectedModel, availableModels)}
+                <Text style={styles.drawerSub} numberOfLines={1}>
+                  {output.job_title} @ {output.company} •{" "}
+                  {resolveModelDisplayName(selectedModel, availableModels)}
                 </Text>
               </View>
             </View>
@@ -487,7 +497,7 @@ export default function OutputDetailScreen() {
               }}
               style={styles.closeBtn}
             >
-              <X size={18} color={COLORS.textSecondary} />
+              <X size={18} color={colors.textSecondary} />
             </Pressable>
           </View>
 
@@ -508,7 +518,7 @@ export default function OutputDetailScreen() {
             >
               <FileText
                 size={13}
-                color={targetDoc === "cv" ? "#FFFFFF" : COLORS.textSecondary}
+                color={targetDoc === "cv" ? "#FFFFFF" : colors.textSecondary}
               />
               <Text
                 style={[
@@ -529,7 +539,7 @@ export default function OutputDetailScreen() {
             >
               <Mail
                 size={13}
-                color={targetDoc === "cover_letter" ? "#FFFFFF" : COLORS.textSecondary}
+                color={targetDoc === "cover_letter" ? "#FFFFFF" : colors.textSecondary}
               />
               <Text
                 style={[
@@ -550,7 +560,7 @@ export default function OutputDetailScreen() {
           >
             {chatHistory.length === 0 ? (
               <View style={styles.emptyChat}>
-                <Sparkles size={20} color={COLORS.purple} />
+                <Sparkles size={20} color={colors.purple} />
                 <Text style={styles.emptyChatText}>
                   Describe how you want to refine bullets, remove injected keywords you don't
                   know, or adjust the Cover Letter hook.
@@ -569,7 +579,7 @@ export default function OutputDetailScreen() {
                   >
                     {!isUser ? (
                       <View style={styles.msgIconBot}>
-                        <Bot size={13} color="#E9D5FF" />
+                        <Bot size={13} color={colors.purpleText} />
                       </View>
                     ) : null}
                     <View
@@ -578,16 +588,18 @@ export default function OutputDetailScreen() {
                         isUser ? styles.msgBubbleUser : styles.msgBubbleBot,
                       ]}
                     >
-                      <Text style={styles.msgText}>{msg.content}</Text>
+                      <Text style={isUser ? styles.msgTextUser : styles.msgText}>
+                        {msg.content}
+                      </Text>
                       {msg.timestamp ? (
-                        <Text style={styles.msgTime}>
+                        <Text style={isUser ? styles.msgTimeUser : styles.msgTime}>
                           {formatDisplayDate(msg.timestamp)}
                         </Text>
                       ) : null}
                     </View>
                     {isUser ? (
                       <View style={styles.msgIconUser}>
-                        <UserIcon size={13} color={COLORS.textSecondary} />
+                        <UserIcon size={13} color={colors.textSecondary} />
                       </View>
                     ) : null}
                   </View>
@@ -597,7 +609,7 @@ export default function OutputDetailScreen() {
 
             {revising ? (
               <View style={styles.revisingRow}>
-                <ActivityIndicator size="small" color={COLORS.purple} />
+                <ActivityIndicator size="small" color={colors.purple} />
                 <Text style={styles.revisingText}>
                   Updating & re-scoring your {targetDoc === "cv" ? "CV" : "Cover Letter"}...
                 </Text>
@@ -622,7 +634,7 @@ export default function OutputDetailScreen() {
                   }}
                   style={styles.quickChip}
                 >
-                  <Sparkles size={11} color={COLORS.purple} />
+                  <Sparkles size={11} color={colors.purpleText} />
                   <Text style={styles.quickChipText}>{qa.label}</Text>
                 </Pressable>
               ))}
@@ -635,7 +647,7 @@ export default function OutputDetailScreen() {
               value={chatInput}
               onChangeText={setChatInput}
               placeholder={`Describe changes for your ${targetDoc === "cv" ? "CV" : "Cover Letter"}...`}
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               editable={!revising}
               style={styles.chatInput}
               onSubmitEditing={() => void handleRevise()}
@@ -657,472 +669,491 @@ export default function OutputDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  center: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 20,
-  },
-  centerText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  headerStrip: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  jobTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  scoreMiniRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 4,
-  },
-  modelLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.textMuted,
-    marginLeft: 4,
-  },
-  pillBar: {
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  pillTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  pillTabActive: {
-    backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
-  },
-  pillTabText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  pillTabTextActive: {
-    color: "#FFFFFF",
-  },
-  toastBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    marginHorizontal: 14,
-    marginBottom: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 9,
-    backgroundColor: COLORS.emeraldSoft,
-    borderWidth: 1,
-    borderColor: COLORS.emeraldBorder,
-  },
-  toastText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6EE7B7",
-  },
-  errorBanner: {
-    marginHorizontal: 14,
-    marginBottom: 4,
-    padding: 9,
-    borderRadius: 9,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#FDA4AF",
-    fontWeight: "600",
-  },
-  carouselContainer: {
-    flex: 1,
-  },
-  slidePage: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  inspectorScroll: {
-    gap: 12,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-    gap: 11,
-  },
-  injectedCard: {
-    borderColor: COLORS.purpleBorder,
-    backgroundColor: "rgba(168, 85, 247, 0.08)",
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  injectedNote: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: COLORS.textSecondary,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  injectedChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  injectedChipText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#E9D5FF",
-  },
-  matchedChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.emeraldSoft,
-    borderWidth: 1,
-    borderColor: COLORS.emeraldBorder,
-  },
-  matchedText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#6EE7B7",
-  },
-  missingChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.roseSoft,
-    borderWidth: 1,
-    borderColor: COLORS.roseBorder,
-  },
-  missingText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#FDA4AF",
-  },
-  muted: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-  bodyText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: COLORS.textSecondary,
-  },
-  bottomBar: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: COLORS.tabBarBg,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  pdfRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  pdfBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 11,
-    borderRadius: 11,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  pdfBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  copilotBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-    borderRadius: 11,
-    backgroundColor: COLORS.purple,
-  },
-  copilotBtnText: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  modalRoot: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  drawerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  drawerTitleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  botAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  drawerTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  drawerSub: {
-    fontSize: 11.5,
-    color: COLORS.textSecondary,
-  },
-  closeBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  docToggleRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: COLORS.surfaceElevated,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  docToggleBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 9,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  docToggleActive: {
-    backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
-  },
-  docToggleActivePurple: {
-    backgroundColor: COLORS.purple,
-    borderColor: COLORS.purple,
-  },
-  docToggleText: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  docToggleTextActive: {
-    color: "#FFFFFF",
-  },
-  chatList: {
-    flex: 1,
-  },
-  chatListContent: {
-    padding: 14,
-    gap: 12,
-  },
-  emptyChat: {
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-    gap: 6,
-  },
-  emptyChatText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: COLORS.textPrimary,
-  },
-  msgRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  msgRowUser: {
-    justifyContent: "flex-end",
-  },
-  msgRowAssistant: {
-    justifyContent: "flex-start",
-  },
-  msgIconBot: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  msgIconUser: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  msgBubble: {
-    maxWidth: "80%",
-    padding: 11,
-    borderRadius: 14,
-    gap: 4,
-  },
-  msgBubbleBot: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderTopLeftRadius: 4,
-  },
-  msgBubbleUser: {
-    backgroundColor: COLORS.indigo,
-    borderTopRightRadius: 4,
-  },
-  msgText: {
-    fontSize: 13,
-    lineHeight: 18.5,
-    color: COLORS.textPrimary,
-  },
-  msgTime: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.55)",
-  },
-  revisingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  revisingText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  quickActionsWrap: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.surfaceElevated,
-    paddingVertical: 8,
-  },
-  quickActionsRow: {
-    paddingHorizontal: 12,
-    gap: 7,
-  },
-  quickChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: COLORS.purpleSoft,
-    borderWidth: 1,
-    borderColor: COLORS.purpleBorder,
-  },
-  quickChipText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: "#E9D5FF",
-  },
-  chatInputBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  chatInput: {
-    flex: 1,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 11,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13.5,
-    color: COLORS.textPrimary,
-  },
-  sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 11,
-    backgroundColor: COLORS.purple,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+function createStyles(colors: ThemeColors, isDark: boolean) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    center: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      padding: 20,
+    },
+    centerText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: "600",
+    },
+    headerStrip: {
+      paddingHorizontal: 14,
+      paddingTop: 10,
+      paddingBottom: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    jobTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    scoreMiniRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 4,
+    },
+    modelLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.textMuted,
+      marginLeft: 4,
+    },
+    pillBar: {
+      flexDirection: "row",
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      backgroundColor: colors.background,
+    },
+    pillTab: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    pillTabActive: {
+      backgroundColor: colors.indigo,
+      borderColor: colors.indigo,
+    },
+    pillTabText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
+    pillTabTextActive: {
+      color: "#FFFFFF",
+    },
+    toastBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+      marginHorizontal: 14,
+      marginBottom: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 9,
+      backgroundColor: colors.emeraldSoft,
+      borderWidth: 1,
+      borderColor: colors.emeraldBorder,
+    },
+    toastText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.emeraldText,
+    },
+    errorBanner: {
+      marginHorizontal: 14,
+      marginBottom: 4,
+      padding: 9,
+      borderRadius: 9,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+    },
+    errorText: {
+      fontSize: 12,
+      color: colors.roseText,
+      fontWeight: "600",
+    },
+    carouselContainer: {
+      flex: 1,
+    },
+    slidePage: {
+      flex: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+    },
+    inspectorScroll: {
+      gap: 12,
+      paddingBottom: 24,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      gap: 11,
+      ...getCardElevation(isDark),
+    },
+    injectedCard: {
+      borderColor: colors.purpleBorder,
+      backgroundColor: isDark ? "rgba(168, 85, 247, 0.08)" : colors.purpleSoft,
+    },
+    cardTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    cardTitle: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    injectedNote: {
+      fontSize: 12,
+      lineHeight: 17,
+      color: colors.textSecondary,
+    },
+    chipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    injectedChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    injectedChipText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.purpleText,
+    },
+    matchedChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.emeraldSoft,
+      borderWidth: 1,
+      borderColor: colors.emeraldBorder,
+    },
+    matchedText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.emeraldText,
+    },
+    missingChip: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.roseSoft,
+      borderWidth: 1,
+      borderColor: colors.roseBorder,
+    },
+    missingText: {
+      fontSize: 11.5,
+      fontWeight: "700",
+      color: colors.roseText,
+    },
+    muted: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    bodyText: {
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: colors.textSecondary,
+    },
+    bottomBar: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      backgroundColor: colors.tabBarBg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    pdfRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    pdfBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: 11,
+      borderRadius: 11,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+    },
+    pdfBtnText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    copilotBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingHorizontal: 15,
+      paddingVertical: 11,
+      borderRadius: 11,
+      backgroundColor: colors.purple,
+    },
+    copilotBtnText: {
+      fontSize: 12.5,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+    modalRoot: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    drawerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: 14,
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    drawerTitleWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flex: 1,
+    },
+    botAvatar: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    drawerTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    drawerSub: {
+      fontSize: 11.5,
+      color: colors.textSecondary,
+    },
+    closeBtn: {
+      padding: 6,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    docToggleRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      backgroundColor: colors.surfaceElevated,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    docToggleBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 8,
+      borderRadius: 9,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    docToggleActive: {
+      backgroundColor: colors.indigo,
+      borderColor: colors.indigo,
+    },
+    docToggleActivePurple: {
+      backgroundColor: colors.purple,
+      borderColor: colors.purple,
+    },
+    docToggleText: {
+      fontSize: 12.5,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
+    docToggleTextActive: {
+      color: "#FFFFFF",
+    },
+    chatList: {
+      flex: 1,
+    },
+    chatListContent: {
+      padding: 14,
+      gap: 12,
+    },
+    emptyChat: {
+      padding: 16,
+      borderRadius: 14,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+      gap: 6,
+    },
+    emptyChatText: {
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: colors.textPrimary,
+    },
+    msgRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+    },
+    msgRowUser: {
+      justifyContent: "flex-end",
+    },
+    msgRowAssistant: {
+      justifyContent: "flex-start",
+    },
+    msgIconBot: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    msgIconUser: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    msgBubble: {
+      maxWidth: "80%",
+      padding: 11,
+      borderRadius: 14,
+      gap: 4,
+    },
+    msgBubbleBot: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderTopLeftRadius: 4,
+      ...getCardElevation(isDark),
+    },
+    msgBubbleUser: {
+      backgroundColor: colors.indigo,
+      borderTopRightRadius: 4,
+    },
+    msgText: {
+      fontSize: 13,
+      lineHeight: 18.5,
+      color: colors.textPrimary,
+    },
+    msgTextUser: {
+      fontSize: 13,
+      lineHeight: 18.5,
+      color: "#FFFFFF",
+    },
+    msgTime: {
+      fontSize: 10,
+      color: colors.textMuted,
+    },
+    msgTimeUser: {
+      fontSize: 10,
+      color: "rgba(255,255,255,0.78)",
+    },
+    revisingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 10,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    revisingText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    quickActionsWrap: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.surfaceElevated,
+      paddingVertical: 8,
+    },
+    quickActionsRow: {
+      paddingHorizontal: 12,
+      gap: 7,
+    },
+    quickChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.purpleSoft,
+      borderWidth: 1,
+      borderColor: colors.purpleBorder,
+    },
+    quickChipText: {
+      fontSize: 11.5,
+      fontWeight: "600",
+      color: colors.purpleText,
+    },
+    chatInputBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 12,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    chatInput: {
+      flex: 1,
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 11,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 13.5,
+      color: colors.textPrimary,
+    },
+    sendBtn: {
+      width: 42,
+      height: 42,
+      borderRadius: 11,
+      backgroundColor: colors.purple,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });
+}
 

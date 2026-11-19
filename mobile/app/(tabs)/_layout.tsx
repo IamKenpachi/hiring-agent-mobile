@@ -1,11 +1,14 @@
 import React from "react";
-import { Pressable } from "react-native";
+import { Pressable, View } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import { FileCheck2, Home, Radar, Settings, Wand2 } from "lucide-react-native";
-import { COLORS } from "../../src/constants/theme";
+import { ThemeToggleButton } from "../../src/components/ThemeToggleButton";
+import { getCardElevation } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 
 export default function TabsLayout() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   return (
     <Tabs
@@ -15,30 +18,49 @@ export default function TabsLayout() {
             accessibilityRole="button"
             accessibilityLabel="Back to Home"
             onPress={() => router.replace("/home")}
-            className="ml-4 h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:bg-white/10"
+            style={({ pressed }) => [
+              {
+                marginLeft: 16,
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: colors.headerBtnBorder,
+                backgroundColor: colors.headerBtnBg,
+                opacity: pressed ? 0.78 : 1,
+              },
+              getCardElevation(isDark),
+            ]}
           >
-            <Home size={16} color="#CBD5E1" />
+            <Home size={16} color={colors.textPrimary} />
           </Pressable>
         ),
+        headerRight: () => (
+          <View style={{ marginRight: 16 }}>
+            <ThemeToggleButton size="compact" />
+          </View>
+        ),
         headerStyle: {
-          backgroundColor: COLORS.background,
+          backgroundColor: colors.background,
         },
         headerTitleStyle: {
-          color: COLORS.textPrimary,
+          color: colors.textPrimary,
           fontWeight: "800",
           fontSize: 17,
         },
         headerShadowVisible: false,
         tabBarStyle: {
-          backgroundColor: COLORS.tabBarBg,
-          borderTopColor: COLORS.border,
+          backgroundColor: colors.tabBarBg,
+          borderTopColor: colors.tabBarBorder,
           borderTopWidth: 1,
           height: 62,
           paddingTop: 6,
           paddingBottom: 8,
         },
-        tabBarActiveTintColor: COLORS.indigo,
-        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarActiveTintColor: colors.indigo,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "700",
@@ -81,4 +103,3 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
-

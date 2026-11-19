@@ -1,15 +1,30 @@
 import React from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { COLORS } from "../src/constants/theme";
+import { useTheme } from "../src/context/ThemeContext";
 
 export default function IndexScreen() {
+  const { colors } = useTheme();
+
   return (
-    <View className="flex-1 bg-obsidian items-center justify-center gap-3">
-      <ActivityIndicator size="large" color={COLORS.indigo} />
-      <Text className="text-slate-400 text-[13px] font-semibold">
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+      }}
+    >
+      <ActivityIndicator size="large" color={colors.indigo} />
+      <Text
+        style={{
+          color: colors.textSecondary,
+          fontSize: 13,
+          fontWeight: "600",
+        }}
+      >
         Loading Hiring Agent Mobile...
       </Text>
     </View>
   );
 }
-
