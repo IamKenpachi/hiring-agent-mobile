@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Modal,
@@ -40,10 +41,16 @@ import {
 import { useAuth } from "../../src/context/AuthContext";
 import { useTheme } from "../../src/context/ThemeContext";
 import { apiClient, ApiError, buildAuthHeaders } from "../../src/lib/api";
+import { parseInlineSpans, type TextSpan } from "../../src/lib/descriptionParser";
 import { resolveModelDisplayName } from "../../src/lib/profileHelpers";
+import {
+  buildDisplayedChatHistory,
+  computeAndroidModalKeyboardInset,
+  parseChatMessageLines,
+} from "../../src/lib/revisionChat";
 import { HtmlDocumentViewer } from "../../src/components/HtmlDocumentViewer";
 import { ScoreBadge, ScoreBar } from "../../src/components/ScoreBadge";
-import type { TailoredOutput } from "../../src/types";
+import type { ChatMessage, TailoredOutput } from "../../src/types";
 
 const SLIDES = [
   { key: "cv", label: "Tailored CV", icon: FileText },
@@ -79,12 +86,77 @@ export default function OutputDetailScreen() {
   const [chatInput, setChatInput] = useState("");
   const [revising, setRevising] = useState(false);
   const [reviseError, setReviseError] = useState<string | null>(null);
+  const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
+  const [androidKeyboardInset, setAndroidKeyboardInset] = useState(0);
   const [downloadingType, setDownloadingType] = useState<"cv" | "cover_letter" | null>(
     null
   );
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const chatScrollRef = useRef<ScrollView>(null);
+  const modalRootRef = useRef<View>(null);
+
+  const chatHistory = useMemo(
+    () => (Array.isArray(output?.chat_history) ? output.chat_history : []),
+    [output?.chat_history]
+  );
+
+  const displayedChatHistory = useMemo(
+    () => buildDisplayedChatHistory(chatHistory, pendingUserMessage),
+    [chatHistory, pendingUserMessage]
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !chatOpen) {
+      setAndroidKeyboardInset(0);
+      return;
+    }
+
+    let active = true;
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleScrollToEnd = () => {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        if (active) {
+          chatScrollRef.current?.scrollToEnd({ animated: true });
+        }
+      }, 80);
+    };
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      const kbHeight = event.endCoordinates?.height ?? 0;
+      const kbScreenY = event.endCoordinates?.screenY ?? 0;
+
+      if (modalRootRef.current) {
+        modalRootRef.current.measureInWindow((_x, y, _w, h) => {
+          if (!active) return;
+          setAndroidKeyboardInset(
+            computeAndroidModalKeyboardInset({
+              modalBottomY: y + h,
+              keyboardScreenY: kbScreenY,
+              keyboardHeight: kbHeight,
+            })
+          );
+          scheduleScrollToEnd();
+        });
+      } else {
+        setAndroidKeyboardInset(Math.max(0, Math.round(kbHeight)));
+        scheduleScrollToEnd();
+      }
+    });
+
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardInset(0);
+    });
+
+    return () => {
+      active = false;
+      if (scrollTimer) clearTimeout(scrollTimer);
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [chatOpen]);
 
   useEffect(() => {
     let active = true;
@@ -141,9 +213,17 @@ export default function OutputDetailScreen() {
     if (!cleanInstruction) return;
 
     const docTypeToUse = overrideDocType ?? targetDoc;
+    setPendingUserMessage({
+      role: "user",
+      content: cleanInstruction,
+      timestamp: new Date().toISOString(),
+      doc_type: docTypeToUse,
+    });
     if (!instructionText) setChatInput("");
+    Keyboard.dismiss();
     setRevising(true);
     setReviseError(null);
+    setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 60);
 
     try {
       const result = await apiClient.reviseOutput(output.id, {
@@ -152,6 +232,7 @@ export default function OutputDetailScreen() {
         model: selectedModel,
       });
       setOutput(result.output);
+      setPendingUserMessage(null);
       await refreshTelemetry();
       setToastMsg(
         docTypeToUse === "cv"
@@ -160,6 +241,8 @@ export default function OutputDetailScreen() {
       );
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 120);
     } catch (err) {
+      setPendingUserMessage(null);
+      if (!instructionText) setChatInput(cleanInstruction);
       setReviseError(
         err instanceof ApiError
           ? err.message
@@ -241,7 +324,36 @@ export default function OutputDetailScreen() {
     );
   }
 
-  const chatHistory = Array.isArray(output.chat_history) ? output.chat_history : [];
+  const renderChatContent = (content: string, isUser: boolean) => {
+    const lines = parseChatMessageLines(content, parseInlineSpans);
+    return (
+      <Text style={isUser ? styles.msgTextUser : styles.msgText}>
+        {lines.map((spans, lineIdx) => (
+          <React.Fragment key={lineIdx}>
+            {lineIdx > 0 ? "\n" : null}
+            {spans.map((span: TextSpan, spanIdx: number) => {
+              if (!span.bold && !span.italic) {
+                return (
+                  <React.Fragment key={spanIdx}>{span.text}</React.Fragment>
+                );
+              }
+              return (
+                <Text
+                  key={spanIdx}
+                  style={[
+                    span.bold && styles.msgTextBold,
+                    span.italic && styles.msgTextItalic,
+                  ]}
+                >
+                  {span.text}
+                </Text>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </Text>
+    );
+  };
 
   return (
     <View style={styles.root}>
@@ -474,15 +586,25 @@ export default function OutputDetailScreen() {
         visible={chatOpen}
         animationType="slide"
         presentationStyle="pageSheet"
+        statusBarTranslucent
         onRequestClose={() => {
           setReviseError(null);
           setChatOpen(false);
         }}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalRoot}
+        <View
+          ref={modalRootRef}
+          collapsable={false}
+          style={[
+            styles.modalRoot,
+            Platform.OS === "android" &&
+              androidKeyboardInset > 0 && { paddingBottom: androidKeyboardInset },
+          ]}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ flex: 1 }}
+          >
           {/* Drawer Header */}
           <View
             style={[
@@ -569,8 +691,9 @@ export default function OutputDetailScreen() {
             ref={chatScrollRef}
             style={styles.chatList}
             contentContainerStyle={styles.chatListContent}
+            keyboardShouldPersistTaps="handled"
           >
-            {chatHistory.length === 0 ? (
+            {displayedChatHistory.length === 0 ? (
               <View style={styles.emptyChat}>
                 <Sparkles size={20} color={colors.purple} />
                 <Text style={styles.emptyChatText}>
@@ -579,7 +702,7 @@ export default function OutputDetailScreen() {
                 </Text>
               </View>
             ) : (
-              chatHistory.map((msg, idx) => {
+              displayedChatHistory.map((msg, idx) => {
                 const isUser = msg.role === "user";
                 return (
                   <View
@@ -600,9 +723,7 @@ export default function OutputDetailScreen() {
                         isUser ? styles.msgBubbleUser : styles.msgBubbleBot,
                       ]}
                     >
-                      <Text style={isUser ? styles.msgTextUser : styles.msgText}>
-                        {msg.content}
-                      </Text>
+                      {renderChatContent(msg.content, isUser)}
                       {msg.timestamp ? (
                         <Text style={isUser ? styles.msgTimeUser : styles.msgTime}>
                           {formatDisplayDate(msg.timestamp)}
@@ -635,6 +756,7 @@ export default function OutputDetailScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.quickActionsRow}
+              keyboardShouldPersistTaps="handled"
             >
               {QUICK_ACTIONS.map((qa) => (
                 <Pressable
@@ -657,7 +779,12 @@ export default function OutputDetailScreen() {
           <View
             style={[
               styles.chatInputBar,
-              { paddingBottom: Math.max(insets.bottom, 12) },
+              {
+                paddingBottom:
+                  Platform.OS === "android" && androidKeyboardInset > 0
+                    ? 10
+                    : Math.max(insets.bottom, 12),
+              },
             ]}
           >
             <TextInput
@@ -666,8 +793,10 @@ export default function OutputDetailScreen() {
               placeholder={`Describe changes for your ${targetDoc === "cv" ? "CV" : "Cover Letter"}...`}
               placeholderTextColor={colors.textMuted}
               editable={!revising}
+              multiline
+              maxLength={2000}
+              textAlignVertical="top"
               style={styles.chatInput}
-              onSubmitEditing={() => void handleRevise()}
             />
             <Pressable
               onPress={() => void handleRevise()}
@@ -681,6 +810,7 @@ export default function OutputDetailScreen() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -1095,6 +1225,12 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       lineHeight: 18.5,
       color: "#FFFFFF",
     },
+    msgTextBold: {
+      fontWeight: "700",
+    },
+    msgTextItalic: {
+      fontStyle: "italic",
+    },
     msgTime: {
       fontSize: 10,
       color: colors.textMuted,
@@ -1145,7 +1281,7 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
     },
     chatInputBar: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-end",
       gap: 8,
       padding: 12,
       backgroundColor: colors.surface,
@@ -1154,6 +1290,8 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
     },
     chatInput: {
       flex: 1,
+      minHeight: 42,
+      maxHeight: 110,
       backgroundColor: colors.inputBg,
       borderWidth: 1,
       borderColor: colors.border,
