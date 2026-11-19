@@ -163,10 +163,8 @@ export default function OutputsScreen() {
           renderItem={({ item }) => (
             <Pressable
               onPress={() => router.push(`/output/${item.id}`)}
-              style={({ pressed }) => [
-                styles.card,
-                pressed && { opacity: 0.88 },
-              ]}
+              className="active:opacity-90"
+              style={styles.card}
             >
               <View style={styles.cardTop}>
                 <View style={{ flex: 1, gap: 2 }}>
@@ -183,10 +181,8 @@ export default function OutputsScreen() {
                     hitSlop={8}
                     accessibilityRole="button"
                     accessibilityLabel={`Delete ${item.job_title || "tailored output"}`}
-                    style={({ pressed }) => [
-                      styles.deleteIconBtn,
-                      pressed && styles.deleteIconBtnPressed,
-                    ]}
+                    className="active:opacity-75"
+                    style={styles.deleteIconBtn}
                   >
                     <Trash2 size={15} color={colors.textMuted} />
                   </Pressable>
@@ -249,11 +245,8 @@ export default function OutputsScreen() {
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Close delete confirmation"
-                style={({ pressed }) => [
-                  styles.modalCloseBtn,
-                  pressed && !deleting && { opacity: 0.75 },
-                  deleting && { opacity: 0.45 },
-                ]}
+                className={deleting ? undefined : "active:opacity-75"}
+                style={[styles.modalCloseBtn, deleting && { opacity: 0.45 }]}
               >
                 <X size={16} color={colors.textSecondary} />
               </Pressable>
@@ -295,11 +288,8 @@ export default function OutputsScreen() {
                 disabled={deleting}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel deletion"
-                style={({ pressed }) => [
-                  styles.cancelBtn,
-                  pressed && !deleting && { opacity: 0.85 },
-                  deleting && { opacity: 0.5 },
-                ]}
+                className={deleting ? undefined : "active:opacity-85"}
+                style={[styles.cancelBtn, deleting && { opacity: 0.5 }]}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
@@ -309,11 +299,8 @@ export default function OutputsScreen() {
                 disabled={deleting}
                 accessibilityRole="button"
                 accessibilityLabel="Confirm delete saved output"
-                style={({ pressed }) => [
-                  styles.confirmDeleteBtn,
-                  pressed && !deleting && { opacity: 0.85 },
-                  deleting && { opacity: 0.7 },
-                ]}
+                className={deleting ? undefined : "active:opacity-85"}
+                style={[styles.confirmDeleteBtn, deleting && { opacity: 0.7 }]}
               >
                 {deleting ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
@@ -437,10 +424,6 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : colors.surfaceElevated,
       borderWidth: 1,
       borderColor: isDark ? "transparent" : colors.border,
-    },
-    deleteIconBtnPressed: {
-      backgroundColor: colors.roseSoft,
-      borderColor: colors.roseBorder,
     },
     jobTitle: {
       fontSize: 15.5,

@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import {
@@ -63,6 +64,7 @@ export default function OutputDetailScreen() {
   const { selectedModel, availableModels, refreshTelemetry } = useAuth();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+  const insets = useSafeAreaInsets();
 
   const [output, setOutput] = useState<TailoredOutput | null>(null);
   const [loading, setLoading] = useState(true);
@@ -424,7 +426,12 @@ export default function OutputDetailScreen() {
       </View>
 
       {/* Bottom Action Bar: Download/Share PDFs + Open Revision Studio */}
-      <View style={styles.bottomBar}>
+      <View
+        style={[
+          styles.bottomBar,
+          { paddingBottom: Math.max(insets.bottom, 10) },
+        ]}
+      >
         <View style={styles.pdfRow}>
           <Pressable
             onPress={() => void handleDownloadPdf("cv")}
@@ -477,7 +484,12 @@ export default function OutputDetailScreen() {
           style={styles.modalRoot}
         >
           {/* Drawer Header */}
-          <View style={styles.drawerHeader}>
+          <View
+            style={[
+              styles.drawerHeader,
+              { paddingTop: Math.max(insets.top, 14) },
+            ]}
+          >
             <View style={styles.drawerTitleWrap}>
               <View style={styles.botAvatar}>
                 <Bot size={16} color={colors.purpleText} />
@@ -642,7 +654,12 @@ export default function OutputDetailScreen() {
           </View>
 
           {/* Chat Input Bar */}
-          <View style={styles.chatInputBar}>
+          <View
+            style={[
+              styles.chatInputBar,
+              { paddingBottom: Math.max(insets.bottom, 12) },
+            ]}
+          >
             <TextInput
               value={chatInput}
               onChangeText={setChatInput}

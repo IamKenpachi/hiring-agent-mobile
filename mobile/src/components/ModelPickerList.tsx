@@ -27,11 +27,8 @@ export function ModelPickerList({
           <Pressable
             key={model.id}
             onPress={() => onSelect(model.id)}
-            style={({ pressed }) => [
-              styles.card,
-              isSelected && styles.cardSelected,
-              pressed && styles.cardPressed,
-            ]}
+            className="active:opacity-85"
+            style={[styles.card, isSelected && styles.cardSelected]}
           >
             <View style={styles.leftIcon}>
               <Cpu
@@ -89,9 +86,6 @@ function createStyles(colors: ThemeColors, _isDark: boolean) {
     cardSelected: {
       backgroundColor: colors.indigoSoft,
       borderColor: colors.indigoBorder,
-    },
-    cardPressed: {
-      opacity: 0.85,
     },
     leftIcon: {
       width: 34,

@@ -26,7 +26,6 @@
     },
     "android": {
       "package": "com.hiringagent.mobile",
-      "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -79,6 +78,16 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5db9702b-697d-44ca-990b-1e097b900019"
+      }
+    },
+    "owner": "mirakle1",
+    "updates": {
+      "url": "https://u.expo.dev/5db9702b-697d-44ca-990b-1e097b900019"
     }
   }
 }

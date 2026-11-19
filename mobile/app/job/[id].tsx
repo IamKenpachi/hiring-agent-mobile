@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Building2,
   Check,
@@ -80,6 +81,7 @@ export default function JobDetailScreen() {
   const { selectedModel } = useAuth();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+  const insets = useSafeAreaInsets();
 
   const [job, setJob] = useState<RankedJob | null>(null);
   const [loading, setLoading] = useState(true);
@@ -194,7 +196,12 @@ export default function JobDetailScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: 112 + insets.bottom },
+        ]}
+      >
         {/* Header Card */}
         <View style={styles.card}>
           <View style={styles.topRow}>
@@ -359,11 +366,8 @@ export default function JobDetailScreen() {
                 onPress={() => void handleCopyDescription()}
                 accessibilityRole="button"
                 accessibilityLabel="Copy job description"
-                style={({ pressed }) => [
-                  styles.copyBtn,
-                  copiedDesc && styles.copyBtnCopied,
-                  pressed && { opacity: 0.75 },
-                ]}
+                className="active:opacity-75"
+                style={[styles.copyBtn, copiedDesc && styles.copyBtnCopied]}
               >
                 {copiedDesc ? (
                   <Check size={13} color={colors.emeraldText} />
@@ -438,10 +442,16 @@ export default function JobDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom CTA */}
-      <View style={styles.stickyBar}>
+      <View
+        style={[
+          styles.stickyBar,
+          { paddingBottom: Math.max(insets.bottom, 14) },
+        ]}
+      >
         <Pressable
           onPress={handleTailorJob}
-          style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
+          className="active:opacity-85"
+          style={styles.ctaBtn}
         >
           <Sparkles size={18} color="#FFFFFF" />
           <Text style={styles.ctaText}>Yes, Tailor CV & Cover Letter</Text>

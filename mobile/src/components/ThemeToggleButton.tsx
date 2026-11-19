@@ -27,7 +27,8 @@ export function ThemeToggleButton({
       accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
       hitSlop={6}
       onPress={() => void toggleTheme()}
-      style={({ pressed }) => [
+      className="active:opacity-80"
+      style={[
         {
           width: dimension,
           height: dimension,
@@ -37,7 +38,6 @@ export function ThemeToggleButton({
           borderColor: colors.headerBtnBorder,
           alignItems: "center",
           justifyContent: "center",
-          opacity: pressed ? 0.78 : 1,
         },
         getCardElevation(isDark),
         style,

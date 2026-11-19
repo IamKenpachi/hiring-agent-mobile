@@ -186,7 +186,7 @@ def _execute_hunt_run(
 
         run.status = "ranking"
         run.progress_pct = 65.0
-        run.status_detail = f"Scoring {len(raw_jobs)} scraped jobs via Google ADK JobMatcherAgent..."
+        run.status_detail = f"Scoring {len(raw_jobs)} scraped listings across 4 fit dimensions..."
         session.commit()
 
         scored_jobs, in_tok, out_tok = rank_jobs_batch(

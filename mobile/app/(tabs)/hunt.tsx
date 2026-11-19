@@ -477,10 +477,8 @@ export default function HuntScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Home"
                 onPress={() => router.replace("/home")}
-                style={({ pressed }) => [
-                  styles.headerPillBtn,
-                  pressed && { opacity: 0.8 },
-                ]}
+                className="active:opacity-80"
+                style={styles.headerPillBtn}
               >
                 <Home size={14} color={colors.textPrimary} />
                 <Text style={[styles.headerPillText, WEB_SANS]}>Home</Text>
@@ -759,11 +757,8 @@ export default function HuntScreen() {
                 accessibilityLabel={`Hunt Top ${requestedTopN} Matches`}
                 onPress={handleStartHunt}
                 disabled={hunting}
-                style={({ pressed }) => [
-                  styles.gradientCta,
-                  hunting && { opacity: 0.7 },
-                  pressed && { opacity: 0.9 },
-                ]}
+                className={hunting ? undefined : "active:opacity-90"}
+                style={[styles.gradientCta, hunting && { opacity: 0.7 }]}
               >
                 <AuthButtonGradient />
                 <View style={styles.gradientCtaInner}>
@@ -793,7 +788,8 @@ export default function HuntScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Back to hunt configuration"
                 onPress={() => setStage("config")}
-                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+                className="active:opacity-75"
+                style={styles.backBtn}
               >
                 <ArrowLeft size={20} color={colors.textPrimary} />
               </Pressable>
@@ -965,10 +961,8 @@ export default function HuntScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Show Results"
                   onPress={() => setStage("results")}
-                  style={({ pressed }) => [
-                    styles.showResultsCta,
-                    pressed && { opacity: 0.9 },
-                  ]}
+                  className="active:opacity-90"
+                  style={styles.showResultsCta}
                 >
                   <AuthButtonGradient />
                   <View style={styles.gradientCtaInner}>
@@ -981,10 +975,8 @@ export default function HuntScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Edit Search Config"
                   onPress={() => setStage("config")}
-                  style={({ pressed }) => [
-                    styles.editConfigLink,
-                    pressed && { opacity: 0.7 },
-                  ]}
+                  className="active:opacity-75"
+                  style={styles.editConfigLink}
                 >
                   <Text style={[styles.editConfigLinkText, WEB_SANS]}>
                     Edit Search Config
@@ -1007,7 +999,8 @@ export default function HuntScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Back to hunt progress"
                 onPress={() => setStage("progress")}
-                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+                className="active:opacity-75"
+                style={styles.backBtn}
               >
                 <ArrowLeft size={20} color={colors.textPrimary} />
               </Pressable>
@@ -1022,10 +1015,8 @@ export default function HuntScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="New Hunt"
                 onPress={() => setStage("config")}
-                style={({ pressed }) => [
-                  styles.headerPillBtn,
-                  pressed && { opacity: 0.8 },
-                ]}
+                className="active:opacity-80"
+                style={styles.headerPillBtn}
               >
                 <Text style={[styles.headerPillText, WEB_SANS]}>New Hunt</Text>
               </Pressable>
@@ -1080,10 +1071,8 @@ export default function HuntScreen() {
                       key={job.id}
                       accessibilityRole="button"
                       onPress={() => router.push(`/job/${job.id}`)}
-                      style={({ pressed }) => [
-                        styles.jobCard,
-                        pressed && { opacity: 0.88 },
-                      ]}
+                      className="active:opacity-90"
+                      style={styles.jobCard}
                     >
                       <View style={styles.jobHeader}>
                         <View style={{ flex: 1, gap: 2 }}>

@@ -271,10 +271,8 @@ export default function SettingsScreen() {
             accessibilityRole="link"
             accessibilityLabel="Privacy Policy"
             onPress={() => void handleOpenPrivacyPolicy()}
-            style={({ pressed }) => [
-              styles.accountActionRow,
-              pressed && { opacity: 0.8 },
-            ]}
+            className="active:opacity-80"
+            style={styles.accountActionRow}
           >
             <View style={styles.titleIconRow}>
               <ShieldCheck size={15} color={colors.indigoText} />
@@ -290,10 +288,8 @@ export default function SettingsScreen() {
               setDeleteAccountError(null);
               setDeleteModalVisible(true);
             }}
-            style={({ pressed }) => [
-              styles.deleteAccountBtn,
-              pressed && { opacity: 0.85 },
-            ]}
+            className="active:opacity-85"
+            style={styles.deleteAccountBtn}
           >
             <Trash2 size={14} color={colors.roseText} />
             <Text style={styles.deleteAccountBtnText}>Delete Account</Text>
@@ -323,10 +319,10 @@ export default function SettingsScreen() {
             accessibilityLabel="Dark mode"
             accessibilityState={{ selected: mode === "dark" }}
             onPress={() => void setThemeMode("dark")}
-            style={({ pressed }) => [
+            className="active:opacity-85"
+            style={[
               styles.segmentBtn,
               mode === "dark" && styles.segmentBtnActive,
-              pressed && { opacity: 0.85 },
             ]}
           >
             <Moon
@@ -348,10 +344,10 @@ export default function SettingsScreen() {
             accessibilityLabel="Light mode"
             accessibilityState={{ selected: mode === "light" }}
             onPress={() => void setThemeMode("light")}
-            style={({ pressed }) => [
+            className="active:opacity-85"
+            style={[
               styles.segmentBtn,
               mode === "light" && styles.segmentBtnActive,
-              pressed && { opacity: 0.85 },
             ]}
           >
             <Sun
@@ -721,9 +717,9 @@ export default function SettingsScreen() {
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Close delete account confirmation"
-                style={({ pressed }) => [
+                className={deletingAccount ? undefined : "active:opacity-75"}
+                style={[
                   styles.deleteModalCloseBtn,
-                  pressed && !deletingAccount && { opacity: 0.75 },
                   deletingAccount && { opacity: 0.45 },
                 ]}
               >
@@ -749,9 +745,9 @@ export default function SettingsScreen() {
                 disabled={deletingAccount}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel account deletion"
-                style={({ pressed }) => [
+                className={deletingAccount ? undefined : "active:opacity-85"}
+                style={[
                   styles.deleteCancelBtn,
-                  pressed && !deletingAccount && { opacity: 0.85 },
                   deletingAccount && { opacity: 0.5 },
                 ]}
               >
@@ -763,9 +759,9 @@ export default function SettingsScreen() {
                 disabled={deletingAccount}
                 accessibilityRole="button"
                 accessibilityLabel="Confirm delete account"
-                style={({ pressed }) => [
+                className={deletingAccount ? undefined : "active:opacity-85"}
+                style={[
                   styles.deleteConfirmBtn,
-                  pressed && !deletingAccount && { opacity: 0.85 },
                   deletingAccount && { opacity: 0.7 },
                 ]}
               >

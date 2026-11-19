@@ -148,7 +148,7 @@ function AuthNavigationGuard() {
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.background },
         headerRight: () => (
-          <View style={{ marginRight: 12 }}>
+          <View style={{ marginRight: 16 }}>
             <ThemeToggleButton size="compact" />
           </View>
         ),
@@ -188,10 +188,7 @@ function ThemedAppShell() {
 
   return (
     <>
-      <StatusBar
-        style={isDark ? "light" : "dark"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar style={isDark ? "light" : "dark"} />
       <AppErrorBoundary colors={colors}>
         <AuthProvider>
           <AuthNavigationGuard />

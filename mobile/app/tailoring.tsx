@@ -354,7 +354,8 @@ export default function TailoringScreen() {
             accessibilityRole="button"
             accessibilityLabel={status === "waiting" ? "Cancel tailoring" : "Go back"}
             onPress={status === "waiting" ? handleCancel : handleGoBack}
-            style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.75 }]}
+            className="active:opacity-75"
+            style={styles.cancelBtn}
           >
             <ArrowLeft size={16} color={colors.textSecondary} />
             <Text style={[styles.cancelText, WEB_SANS]}>
@@ -384,10 +385,8 @@ export default function TailoringScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Go Back"
                 onPress={handleGoBack}
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  pressed && { opacity: 0.88 },
-                ]}
+                className="active:opacity-90"
+                style={styles.primaryBtn}
               >
                 <AuthButtonGradient />
                 <Text style={[styles.primaryBtnText, WEB_SANS]}>Go Back</Text>
@@ -412,10 +411,8 @@ export default function TailoringScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Retry Tailoring"
                   onPress={handleRetry}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    pressed && { opacity: 0.88 },
-                  ]}
+                  className="active:opacity-90"
+                  style={styles.primaryBtn}
                 >
                   <AuthButtonGradient />
                   <View style={styles.btnInner}>
@@ -430,10 +427,8 @@ export default function TailoringScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Go Back"
                   onPress={handleGoBack}
-                  style={({ pressed }) => [
-                    styles.secondaryBtn,
-                    pressed && { opacity: 0.8 },
-                  ]}
+                  className="active:opacity-80"
+                  style={styles.secondaryBtn}
                 >
                   <Text style={[styles.secondaryBtnText, WEB_SANS]}>Go Back</Text>
                 </Pressable>

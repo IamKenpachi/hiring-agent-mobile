@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, View } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import { FileCheck2, Home, Radar, Settings, Wand2 } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemeToggleButton } from "../../src/components/ThemeToggleButton";
 import { getCardElevation } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -9,6 +10,8 @@ import { useTheme } from "../../src/context/ThemeContext";
 export default function TabsLayout() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
 
   return (
     <Tabs
@@ -18,7 +21,8 @@ export default function TabsLayout() {
             accessibilityRole="button"
             accessibilityLabel="Back to Home"
             onPress={() => router.replace("/home")}
-            style={({ pressed }) => [
+            className="active:opacity-80"
+            style={[
               {
                 marginLeft: 16,
                 width: 34,
@@ -29,7 +33,6 @@ export default function TabsLayout() {
                 borderWidth: 1,
                 borderColor: colors.headerBtnBorder,
                 backgroundColor: colors.headerBtnBg,
-                opacity: pressed ? 0.78 : 1,
               },
               getCardElevation(isDark),
             ]}
@@ -55,9 +58,9 @@ export default function TabsLayout() {
           backgroundColor: colors.tabBarBg,
           borderTopColor: colors.tabBarBorder,
           borderTopWidth: 1,
-          height: 62,
+          height: 58 + bottomInset,
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: bottomInset,
         },
         tabBarActiveTintColor: colors.indigo,
         tabBarInactiveTintColor: colors.textMuted,
